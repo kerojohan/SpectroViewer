@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpectroViewer – Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f0f1a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-bottom: 1.5rem; }
+
+    #viewer-container {
+      background: #1a1a2e;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      background: #1e1e35;
+      border-radius: 6px;
+    }
+    button {
+      background: #2d2d4a;
+      color: #e2e8f0;
+      border: 1px solid #3d3d5c;
+      border-radius: 4px;
+      padding: 0.35rem 0.75rem;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    button:hover { background: #3d3d5c; }
+    button.active { background: #4f46e5; border-color: #6366f1; }
+    select, input[type="range"] {
+      background: #2d2d4a;
+      color: #e2e8f0;
+      border: 1px solid #3d3d5c;
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.8rem;
+    }
+    label { font-size: 0.8rem; color: #94a3b8; display: flex; align-items: center; gap: 0.3rem; }
+    .time-display { font-family: monospace; font-size: 0.85rem; color: #a5b4fc; }
+
+    #regions-list {
+      background: #1e1e35;
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    #regions-list h3 { margin-bottom: 0.75rem; font-size: 1rem; }
+    .region-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .region-item:hover { background: #2d2d4a; }
+    .region-item.selected { background: rgba(59, 130, 246, 0.15); }
+    .region-item .time { font-family: monospace; color: #a5b4fc; }
+    .region-item .delete-btn {
+      background: transparent; border: none; color: #ef4444;
+      cursor: pointer; font-size: 1rem; padding: 0 0.25rem;
+    }
+    .empty { color: #64748b; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>SpectroViewer Demo</h1>
+  <p class="subtitle">Lightweight spectrogram viewer with regions, timeline, and media sync.</p>
+
+  <div class="controls">
+    <div class="control-group">
+      <button id="btn-play">&#9654; Play</button>
+      <button id="btn-back">&#9664;&#9664; -5s</button>
+      <button id="btn-fwd">&#9654;&#9654; +5s</button>
+      <select id="speed">
+        <option value="0.25">0.25x</option>
+        <option value="0.5">0.5x</option>
+        <option value="1" selected>1x</option>
+        <option value="1.5">1.5x</option>
+        <option value="2">2x</option>
+      </select>
+      <span class="time-display" id="time-display">0:00.000 / 0:00</span>
+    </div>
+
+    <div class="control-group">
+      <span style="font-size:0.8rem;">Zoom:</span>
+      <input type="range" id="zoom" min="10" max="500" step="10" value="100">
+      <span id="zoom-label" style="font-size:0.8rem;min-width:60px;">100 px/s</span>
+    </div>
+
+    <div class="control-group">
+      <label><input type="checkbox" id="auto-scroll" checked> Auto scroll</label>
+      <label><input type="checkbox" id="auto-center" checked> Auto center</label>
+    </div>
+
+    <div class="control-group">
+      <button id="btn-add-region">+ Add Region</button>
+      <button id="btn-theme">Toggle Theme</button>
+    </div>
+  </div>
+
+  <div id="viewer-container"></div>
+
+  <div id="regions-list">
+    <h3>Regions</h3>
+    <div id="regions-content"><p class="empty">No regions yet. Click "Add Region" then drag on the spectrogram.</p></div>
+  </div>
+
+  <!-- Load from built dist -->
+  <script src="../dist/spectro-viewer.umd.cjs"></script>
+  <script>
+    // -----------------------------------------------------------------------
+    // DEMO: Generate synthetic spectrogram data using canvas
+    // In a real application you'd load pre-rendered images from your server.
+    // -----------------------------------------------------------------------
+    function generateDemoSpectrogram(segmentDuration, totalDuration) {
+      const files = [];
+      const pxPerSec = 200;
+      const height = 400;
+
+      for (let t = 0; t < totalDuration; t += segmentDuration) {
+        const dur = Math.min(segmentDuration, totalDuration - t);
+        const w = Math.round(dur * pxPerSec);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+
+        // Dark background gradient
+        const grad = ctx.createLinearGradient(0, 0, 0, height);
+        grad.addColorStop(0, '#1a0a2e');
+        grad.addColorStop(0.5, '#2d1b4e');
+        grad.addColorStop(1, '#1a0a2e');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, height);
+
+        // Simulated spectral content
+        for (let x = 0; x < w; x += 2) {
+          const time = t + (x / pxPerSec);
+          for (let y = 0; y < height; y += 2) {
+            const freq = 1 - (y / height);
+            const intensity =
+              Math.sin(time * 3 + freq * 20) * 0.3 +
+              Math.sin(time * 7 + freq * 50) * 0.2 +
+              Math.exp(-((freq - 0.4 - 0.1 * Math.sin(time * 2)) ** 2) / 0.01) * 0.8 +
+              Math.exp(-((freq - 0.7 - 0.05 * Math.cos(time * 1.5)) ** 2) / 0.005) * 0.6;
+
+            const v = Math.max(0, Math.min(1, intensity));
+            if (v > 0.15) {
+              const r = Math.round(50 + v * 200);
+              const g = Math.round(v * 100);
+              const b = Math.round(80 + v * 150);
+              ctx.fillStyle = `rgba(${r},${g},${b},${v})`;
+              ctx.fillRect(x, y, 2, 2);
+            }
+          }
+        }
+
+        files.push({
+          url: canvas.toDataURL('image/webp', 0.8),
+          width: w,
+          height,
+          startTime: t,
+          duration: dur,
+        });
+      }
+
+      return { files, totalDuration };
+    }
+
+    // -----------------------------------------------------------------------
+    // Create viewer
+    // -----------------------------------------------------------------------
+    const { SpectroViewer } = window.SpectroViewer ? window : { SpectroViewer: window.SpectroViewer };
+    const SV = window.SpectroViewer?.SpectroViewer || window.SpectroViewer;
+
+    const viewer = SV.create({
+      container: '#viewer-container',
+      height: 400,
+      pixelsPerSecond: 100,
+      theme: 'dark',
+      frequencyAxis: { min: 0, max: 125000 },
+      regions: { draggable: true, resizable: true },
+    });
+
+    // Generate 60 seconds of demo spectrogram data
+    const spectrogramData = generateDemoSpectrogram(10, 60);
+    viewer.loadSpectrogram(spectrogramData);
+
+    // -----------------------------------------------------------------------
+    // Controls
+    // -----------------------------------------------------------------------
+    const btnPlay = document.getElementById('btn-play');
+    const timeDisplay = document.getElementById('time-display');
+    const zoomSlider = document.getElementById('zoom');
+    const zoomLabel = document.getElementById('zoom-label');
+    let isDark = true;
+
+    // Time formatting
+    function fmt(s) {
+      const m = Math.floor(s / 60);
+      const sec = Math.floor(s % 60);
+      const ms = Math.floor((s % 1) * 1000);
+      return `${m}:${String(sec).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+    }
+    function fmtShort(s) {
+      const m = Math.floor(s / 60);
+      const sec = Math.floor(s % 60);
+      return `${m}:${String(sec).padStart(2, '0')}`;
+    }
+
+    viewer.on('timeupdate', (time) => {
+      timeDisplay.textContent = `${fmt(time)} / ${fmtShort(viewer.duration)}`;
+    });
+
+    // Note: play/pause won't work without a real media element
+    // This demo shows the viewer's visual capabilities
+
+    document.getElementById('zoom').addEventListener('input', (e) => {
+      const val = Number(e.target.value);
+      viewer.zoom(val);
+      zoomLabel.textContent = `${val} px/s`;
+    });
+
+    document.getElementById('auto-scroll').addEventListener('change', (e) => {
+      viewer.setAutoScroll(e.target.checked);
+    });
+    document.getElementById('auto-center').addEventListener('change', (e) => {
+      viewer.setAutoCenter(e.target.checked);
+    });
+
+    document.getElementById('btn-theme').addEventListener('click', () => {
+      isDark = !isDark;
+      // For a full theme switch you'd recreate the viewer; this is a demo placeholder
+      document.body.style.background = isDark ? '#0f0f1a' : '#f8fafc';
+      document.body.style.color = isDark ? '#e2e8f0' : '#1e293b';
+    });
+
+    // -----------------------------------------------------------------------
+    // Regions
+    // -----------------------------------------------------------------------
+    let addingRegion = false;
+    const btnAdd = document.getElementById('btn-add-region');
+    const regionsContent = document.getElementById('regions-content');
+
+    btnAdd.addEventListener('click', () => {
+      addingRegion = !addingRegion;
+      btnAdd.classList.toggle('active', addingRegion);
+      if (addingRegion) {
+        viewer.enableDragSelection();
+      } else {
+        viewer.disableDragSelection();
+      }
+    });
+
+    function renderRegionsList() {
+      const regions = viewer.getRegions();
+      if (regions.length === 0) {
+        regionsContent.innerHTML = '<p class="empty">No regions yet. Click "Add Region" then drag on the spectrogram.</p>';
+        return;
+      }
+      regionsContent.innerHTML = regions
+        .sort((a, b) => a.start - b.start)
+        .map(r => `
+          <div class="region-item ${r.selected ? 'selected' : ''}" data-id="${r.id}">
+            <span class="time">${fmt(r.start)} – ${fmt(r.end)}</span>
+            <button class="delete-btn" data-delete="${r.id}" title="Delete">&#128465;</button>
+          </div>
+        `).join('');
+    }
+
+    viewer.on('region:created', (region) => {
+      addingRegion = false;
+      btnAdd.classList.remove('active');
+      viewer.disableDragSelection();
+      renderRegionsList();
+    });
+
+    viewer.on('region:updated', renderRegionsList);
+    viewer.on('region:removed', renderRegionsList);
+    viewer.on('region:selected', renderRegionsList);
+
+    regionsContent.addEventListener('click', (e) => {
+      const deleteBtn = e.target.closest('[data-delete]');
+      if (deleteBtn) {
+        viewer.removeRegion(deleteBtn.dataset.delete);
+        return;
+      }
+      const item = e.target.closest('.region-item');
+      if (item) {
+        const id = item.dataset.id;
+        viewer.selectRegion(id);
+        const region = viewer.getRegion(id);
+        if (region) {
+          viewer.setTime(region.start);
+          viewer.scrollToTime(region.start, { center: true });
+        }
+      }
+    });
+  </script>
+</body>
+</html>

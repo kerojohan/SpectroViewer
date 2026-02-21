@@ -1,0 +1,44 @@
+{
+  "name": "spectro-viewer",
+  "version": "0.1.0",
+  "description": "Lightweight, framework-agnostic spectrogram viewer with regions, timeline, and media synchronization. Designed for bioacoustics and audio analysis.",
+  "type": "module",
+  "main": "dist/spectro-viewer.umd.cjs",
+  "module": "dist/spectro-viewer.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/spectro-viewer.js",
+      "require": "./dist/spectro-viewer.umd.cjs"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "spectrogram",
+    "viewer",
+    "audio",
+    "bioacoustics",
+    "waveform",
+    "regions",
+    "annotations",
+    "timeline",
+    "bat-detector",
+    "ultrasound"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vite": "^6.1.0",
+    "vite-plugin-dts": "^4.5.0"
+  }
+}
