@@ -3,22 +3,25 @@ import type { TimelineConfig, ThemeColors } from '../types';
 /**
  * Renders an adaptive time-axis below the spectrogram.
  *
- * Uses a single <canvas> that stretches to the full scroll-content width.
- * Re-rendered on zoom changes.
+ * Uses a dedicated scroll-synced wrapper so it sits below
+ * the main scrollViewport and is never clipped by overflow.
  */
 export class Timeline {
+  private wrapper: HTMLElement;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private height: number;
   private config: Required<Pick<TimelineConfig, 'primaryColor' | 'secondaryColor' | 'fontColor' | 'fontSize' | 'fontFamily'>>;
+  private scrollHandler: (() => void) | null = null;
 
   constructor(
-    private scrollContent: HTMLElement,
+    private parentWrapper: HTMLElement,
+    private scrollViewport: HTMLElement,
     configInput: TimelineConfig | undefined,
     private theme: ThemeColors,
   ) {
     const cfg = configInput ?? {};
-    this.height = cfg.height ?? 30;
+    this.height = cfg.height ?? 24;
 
     this.config = {
       primaryColor: cfg.primaryColor ?? theme.timelineLine,
@@ -28,18 +31,33 @@ export class Timeline {
       fontFamily: cfg.fontFamily ?? 'system-ui, -apple-system, sans-serif',
     };
 
+    this.wrapper = document.createElement('div');
+    this.wrapper.className = 'sv-timeline-wrapper';
+    Object.assign(this.wrapper.style, {
+      overflowX: 'hidden',
+      overflowY: 'hidden',
+      height: `${this.height}px`,
+      flexShrink: '0',
+      position: 'relative',
+      background: theme.timelineBackground ?? theme.background,
+    });
+
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'sv-timeline';
     Object.assign(this.canvas.style, {
       display: 'block',
       height: `${this.height}px`,
-      width: '100%',
-      background: theme.timelineBackground,
-      borderTop: `1px solid ${theme.timelineLine}44`,
     });
 
     this.ctx = this.canvas.getContext('2d')!;
-    this.scrollContent.appendChild(this.canvas);
+    this.wrapper.appendChild(this.canvas);
+    this.parentWrapper.appendChild(this.wrapper);
+
+    // Sync horizontal scroll with main viewport
+    this.scrollHandler = () => {
+      this.wrapper.scrollLeft = this.scrollViewport.scrollLeft;
+    };
+    this.scrollViewport.addEventListener('scroll', this.scrollHandler);
   }
 
   render(duration: number, pxPerSec: number): void {
@@ -58,7 +76,7 @@ export class Timeline {
     const subInterval = interval / 5;
 
     ctx.font = `${this.config.fontSize}px ${this.config.fontFamily}`;
-    ctx.textBaseline = 'middle';
+    ctx.textBaseline = 'top';
 
     for (let t = 0; t <= duration; t += subInterval) {
       const x = Math.round(t * pxPerSec) + 0.5;
@@ -70,19 +88,22 @@ export class Timeline {
       if (isMajor) {
         ctx.strokeStyle = this.config.primaryColor;
         ctx.lineWidth = 1;
-        ctx.lineTo(x, this.height * 0.45);
+        ctx.lineTo(x, this.height * 0.5);
         ctx.stroke();
 
         const label = this.formatTime(t);
         ctx.fillStyle = this.config.fontColor;
-        ctx.fillText(label, x + 4, this.height * 0.72);
+        ctx.fillText(label, x + 3, 2);
       } else {
         ctx.strokeStyle = this.config.secondaryColor;
         ctx.lineWidth = 0.5;
-        ctx.lineTo(x, this.height * 0.25);
+        ctx.lineTo(x, this.height * 0.3);
         ctx.stroke();
       }
     }
+
+    // Sync scroll position after render
+    this.wrapper.scrollLeft = this.scrollViewport.scrollLeft;
   }
 
   /** Choose a nice human-readable tick interval based on zoom level. */
@@ -110,6 +131,9 @@ export class Timeline {
   }
 
   destroy(): void {
-    this.canvas.remove();
+    if (this.scrollHandler) {
+      this.scrollViewport.removeEventListener('scroll', this.scrollHandler);
+    }
+    this.wrapper.remove();
   }
 }

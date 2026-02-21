@@ -6,6 +6,7 @@ import type {
   Region,
   ThemeColors,
   FrequencyAxisConfig,
+  ScrollConfig,
 } from '../types';
 
 import { EventEmitter } from './EventEmitter';
@@ -14,6 +15,7 @@ import { SpectrogramLayer } from '../layers/SpectrogramLayer';
 import { RegionsLayer } from '../layers/RegionsLayer';
 import { Timeline } from './Timeline';
 import { FrequencyAxis } from './FrequencyAxis';
+import { FrequencyGrid } from './FrequencyGrid';
 import { Cursor } from './Cursor';
 import { HoverLine } from './HoverLine';
 import { ScrollManager } from './ScrollManager';
@@ -31,18 +33,18 @@ import { injectStyles } from '../styles';
  * ```
  */
 export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
-  // -- DOM ------------------------------------------------------------------
+  // -- DOM structure --------------------------------------------------------
   private root: HTMLElement;
   private wrapper: HTMLElement;
   private scrollViewport: HTMLElement;
   private scrollContent: HTMLElement;
-  private spectroArea: HTMLElement;
 
   // -- Sub-components -------------------------------------------------------
   private spectrogramLayer!: SpectrogramLayer;
   private regionsLayer: RegionsLayer | null = null;
   private timeline: Timeline | null = null;
   private freqAxis: FrequencyAxis | null = null;
+  private freqGrid: FrequencyGrid | null = null;
   private cursor: Cursor | null = null;
   private hoverLine: HoverLine | null = null;
   private scrollManager!: ScrollManager;
@@ -57,6 +59,7 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
   private _playing = false;
   private _destroyed = false;
 
+  // -- CSS injection guard --------------------------------------------------
   private static stylesInjected = false;
 
   private constructor(private opts: SpectroViewerOptions) {
@@ -72,13 +75,13 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
     this.spectrogramHeight = opts.height ?? 400;
     if (opts.duration) this._duration = opts.duration;
 
+    // --- Resolve container ---
     const container = typeof opts.container === 'string'
       ? document.querySelector<HTMLElement>(opts.container)
       : opts.container;
     if (!container) throw new Error(`[SpectroViewer] Container not found: ${opts.container}`);
 
-    // ── Build DOM tree ─────────────────────────────────────────────────
-
+    // --- Build DOM tree ---
     this.root = document.createElement('div');
     this.root.className = 'sv-root';
     Object.assign(this.root.style, {
@@ -90,7 +93,7 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
       fontFamily: 'system-ui, -apple-system, sans-serif',
     });
 
-    // Frequency axis (left side)
+    // Frequency axis (left side – built first so it precedes the scroll area)
     if (opts.frequencyAxis !== false) {
       this.freqAxis = new FrequencyAxis(
         this.root,
@@ -100,7 +103,7 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
       );
     }
 
-    // Wrapper (right side, fills remaining width)
+    // Scroll wrapper (right side)
     this.wrapper = document.createElement('div');
     this.wrapper.className = 'sv-wrapper';
     Object.assign(this.wrapper.style, {
@@ -111,41 +114,32 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
       position: 'relative',
     });
 
-    // Compute viewport height = spectrogram + timeline + scrollbar
-    const tlCfg = typeof opts.timeline === 'object' ? opts.timeline : undefined;
-    const timelineH = opts.timeline !== false ? (tlCfg?.height ?? 30) : 0;
-    const viewportH = this.spectrogramHeight + timelineH + 14;
-
+    // The viewport that scrolls horizontally
     this.scrollViewport = document.createElement('div');
     this.scrollViewport.className = 'sv-scroll-viewport';
     Object.assign(this.scrollViewport.style, {
       overflowX: 'auto',
       overflowY: 'hidden',
       position: 'relative',
-      height: `${viewportH}px`,
+      flex: '1',
     });
 
+    // The content div that expands to full duration width
     this.scrollContent = document.createElement('div');
     this.scrollContent.className = 'sv-scroll-content';
-    Object.assign(this.scrollContent.style, { position: 'relative' });
-
-    // Fixed-height zone for spectrogram images, cursor, regions, hover
-    this.spectroArea = document.createElement('div');
-    this.spectroArea.className = 'sv-spectro-area';
-    Object.assign(this.spectroArea.style, {
+    Object.assign(this.scrollContent.style, {
       position: 'relative',
-      height: `${this.spectrogramHeight}px`,
-      overflow: 'hidden',
+      minHeight: `${this.spectrogramHeight}px`,
+      display: 'flex',
+      flexDirection: 'column',
     });
-    this.scrollContent.appendChild(this.spectroArea);
 
     this.scrollViewport.appendChild(this.scrollContent);
     this.wrapper.appendChild(this.scrollViewport);
     this.root.appendChild(this.wrapper);
     container.appendChild(this.root);
 
-    // ── Initialize sub-components ──────────────────────────────────────
-
+    // --- Initialize sub-components ---
     this.scrollManager = new ScrollManager(
       this.scrollViewport,
       typeof opts.scroll === 'object' ? opts.scroll : undefined,
@@ -153,16 +147,36 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
     );
 
     this.spectrogramLayer = new SpectrogramLayer(
-      this.spectroArea,
+      this.scrollContent,
       this.scrollViewport,
       this.pxPerSec,
       this.spectrogramHeight,
       this.theme,
     );
 
+    // Frequency grid (horizontal lines over the spectrogram)
+    if (opts.frequencyGrid !== false) {
+      this.freqGrid = new FrequencyGrid(
+        this.scrollContent,
+        typeof opts.frequencyGrid === 'object' ? opts.frequencyGrid : undefined,
+        typeof opts.frequencyAxis === 'object' ? opts.frequencyAxis : undefined,
+        this.spectrogramHeight,
+        this.theme,
+      );
+    }
+
+    if (opts.timeline !== false) {
+      this.timeline = new Timeline(
+        this.wrapper,
+        this.scrollViewport,
+        typeof opts.timeline === 'object' ? opts.timeline : undefined,
+        this.theme,
+      );
+    }
+
     if (opts.cursor !== false) {
       this.cursor = new Cursor(
-        this.spectroArea,
+        this.scrollContent,
         this.spectrogramHeight,
         typeof opts.cursor === 'object' ? opts.cursor : undefined,
         this.pxPerSec,
@@ -172,7 +186,7 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
 
     if (opts.hover !== false) {
       this.hoverLine = new HoverLine(
-        this.spectroArea,
+        this.scrollContent,
         this.scrollViewport,
         this.spectrogramHeight,
         () => this._duration,
@@ -184,7 +198,7 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
 
     if (opts.regions !== false) {
       this.regionsLayer = new RegionsLayer(
-        this.spectroArea,
+        this.scrollContent,
         this.scrollViewport,
         this.spectrogramHeight,
         () => this._duration,
@@ -195,23 +209,16 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
       this.wireRegionEvents();
     }
 
-    // Timeline goes AFTER spectroArea (below the spectrogram, inside scrollContent)
-    if (opts.timeline !== false) {
-      this.timeline = new Timeline(
-        this.scrollContent,
-        tlCfg,
-        this.theme,
-      );
-    }
+    // Emit click-to-seek on scrollContent
+    this.scrollContent.addEventListener('click', this.onContentClick);
 
-    // Click-to-seek on the spectrogram area
-    this.spectroArea.addEventListener('click', this.onContentClick);
-
+    // Listen to viewport scroll
     this.scrollViewport.addEventListener('scroll', () => {
       this.emit('scroll', this.scrollViewport.scrollLeft);
     });
   }
 
+  /** Factory method – preferred entry point. */
   static create(opts: SpectroViewerOptions): SpectroViewer {
     return new SpectroViewer(opts);
   }
@@ -226,6 +233,9 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
 
     this.spectrogramLayer.load(data);
     this.updateContentWidth();
+
+    const contentWidth = Math.ceil(totalDuration * this.pxPerSec);
+    this.freqGrid?.render(contentWidth);
 
     if (this.timeline) {
       this.timeline.render(totalDuration, this.pxPerSec);
@@ -250,6 +260,8 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
         if (!this._duration || Math.abs(this._duration - dur) > 0.01) {
           this._duration = dur;
           this.updateContentWidth();
+          const cw = Math.ceil(dur * this.pxPerSec);
+          this.freqGrid?.render(cw);
           if (this.timeline) this.timeline.render(dur, this.pxPerSec);
         }
       },
@@ -288,6 +300,9 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
     this.cursor?.updateZoom(pxPerSec);
     this.regionsLayer?.updateZoom(pxPerSec);
     this.updateContentWidth();
+
+    const contentWidth = Math.ceil(this._duration * pxPerSec);
+    this.freqGrid?.updateZoom(contentWidth);
 
     if (this.timeline) {
       this.timeline.render(this._duration, pxPerSec);
@@ -358,7 +373,6 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
   private updateContentWidth(): void {
     const w = Math.ceil(this._duration * this.pxPerSec);
     this.scrollContent.style.width = `${w}px`;
-    this.spectroArea.style.width = `${w}px`;
   }
 
   private wireRegionEvents(): void {
@@ -389,12 +403,13 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
     this.hoverLine?.destroy();
     this.cursor?.destroy();
     this.regionsLayer?.destroy();
+    this.freqGrid?.destroy();
     this.spectrogramLayer.destroy();
     this.timeline?.destroy();
     this.freqAxis?.destroy();
     this.scrollManager.destroy();
 
-    this.spectroArea.removeEventListener('click', this.onContentClick);
+    this.scrollContent.removeEventListener('click', this.onContentClick);
     this.root.remove();
     this.removeAllListeners();
 

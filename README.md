@@ -2,7 +2,9 @@
 
 Lightweight, framework-agnostic spectrogram viewer with regions, timeline, and media synchronization.
 
-**~9 KB gzipped** – Built for bioacoustics, audio analysis, and anywhere you need to visualize pre-rendered spectrograms with interactive annotations.
+**~10 KB gzipped** – Built for bioacoustics, audio analysis, and anywhere you need to visualize pre-rendered spectrograms with interactive annotations.
+
+![SpectroViewer – dark theme with frequency grid](docs/screenshot-dark.png)
 
 ## Features
 
@@ -10,6 +12,7 @@ Lightweight, framework-agnostic spectrogram viewer with regions, timeline, and m
 - **Interactive regions** – Draggable, resizable time-range annotations with full CRUD support
 - **Timeline** – Adaptive time axis that adjusts tick density to the zoom level
 - **Frequency axis** – Dynamic labels (auto-generated or explicit) with configurable Hz range
+- **Frequency grid** – Horizontal guide lines across the spectrogram at each frequency label
 - **Playhead cursor** – Smooth cursor synced to media playback at 60 fps via requestAnimationFrame
 - **Hover crosshair** – Shows precise time at pointer position
 - **Media synchronization** – Attach any `<audio>` or `<video>` element for playback control
@@ -98,6 +101,7 @@ viewer.on('timeupdate', (time) => {
 | `cursor` | `CursorConfig \| false` | `{}` | Playhead cursor settings or disabled |
 | `hover` | `HoverConfig \| false` | `{}` | Hover crosshair settings or disabled |
 | `scroll` | `ScrollConfig` | `{}` | Scroll behavior |
+| `frequencyGrid` | `FrequencyGridConfig \| false` | `{}` | Frequency grid lines or disabled |
 | `regions` | `RegionsConfig \| false` | `{}` | Regions settings or disabled |
 
 ### Methods
@@ -178,6 +182,32 @@ SpectroViewer.create({
     max: 125000,
     formatLabel: (hz) => hz >= 1000 ? `${hz / 1000}k` : `${hz}`,
   }
+});
+```
+
+## Frequency Grid Configuration
+
+```typescript
+// Default: auto lines derived from frequency axis labels
+SpectroViewer.create({
+  frequencyAxis: { min: 0, max: 125000 },
+  frequencyGrid: {}, // enabled by default
+});
+
+// Custom lines at specific frequencies
+SpectroViewer.create({
+  frequencyGrid: {
+    lines: [20000, 40000, 60000, 80000, 100000],
+    color: '#a5b4fc',
+    opacity: 0.4,
+    dashPattern: [6, 3],
+    showLabels: true,
+  }
+});
+
+// Disable grid
+SpectroViewer.create({
+  frequencyGrid: false,
 });
 ```
 

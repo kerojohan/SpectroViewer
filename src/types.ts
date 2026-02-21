@@ -85,6 +85,23 @@ export interface FrequencyAxisConfig {
   formatLabel?: (hz: number) => string;
 }
 
+export interface FrequencyGridConfig {
+  /** Explicit Hz values to draw lines at, or `'auto'` to derive from freq axis. */
+  lines?: 'auto' | number[];
+  /** Line color (default from theme). */
+  color?: string;
+  /** Line opacity 0–1 (default `0.35`). */
+  opacity?: number;
+  /** Line width in CSS pixels (default `1`). */
+  lineWidth?: number;
+  /** Dash pattern `[dash, gap]` or `null` for solid (default `[4, 4]`). */
+  dashPattern?: [number, number] | null;
+  /** Show frequency labels next to lines (default `true`). */
+  showLabels?: boolean;
+  /** Custom label formatter. */
+  formatLabel?: (hz: number) => string;
+}
+
 export interface CursorConfig {
   color?: string;
   width?: number;
@@ -132,6 +149,8 @@ export interface ThemeColors {
   freqAxisBackground: string;
   freqAxisText: string;
   freqAxisHighlight: string;
+  freqGridLine: string;
+  freqGridLabel: string;
   cursorColor: string;
   hoverLineColor: string;
   hoverLabelBg: string;
@@ -155,6 +174,7 @@ export interface SpectroViewerOptions {
 
   timeline?: TimelineConfig | false;
   frequencyAxis?: FrequencyAxisConfig | false;
+  frequencyGrid?: FrequencyGridConfig | false;
   cursor?: CursorConfig | false;
   hover?: HoverConfig | false;
   scroll?: ScrollConfig;

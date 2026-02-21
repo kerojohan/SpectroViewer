@@ -10,6 +10,7 @@ export type {
   RegionsConfig,
   TimelineConfig,
   FrequencyAxisConfig,
+  FrequencyGridConfig,
   CursorConfig,
   HoverConfig,
   ScrollConfig,
