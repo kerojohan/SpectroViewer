@@ -84,6 +84,8 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
     // --- Build DOM tree ---
     this.root = document.createElement('div');
     this.root.className = 'sv-root';
+    this.root.style.setProperty('--sv-bg', this.theme.background);
+    this.root.style.setProperty('--sv-scrollbar-thumb', this.theme.scrollbarThumb);
     Object.assign(this.root.style, {
       background: this.theme.background,
       color: this.theme.text,

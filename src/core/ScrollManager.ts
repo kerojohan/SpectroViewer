@@ -27,10 +27,8 @@ export class ScrollManager {
   }
 
   private applyScrollbarStyles(): void {
-    Object.assign(this.viewport.style, {
-      scrollbarWidth: 'thin',
-      scrollbarColor: `${this.theme.scrollbarThumb} ${this.theme.scrollbarTrack}`,
-    });
+    // Scrollbar visual styling is handled via CSS in styles.ts
+    // (auto-hiding, thin, transparent track). Only set CSS vars here.
   }
 
   /**

@@ -18,21 +18,58 @@ const CSS = /* css */ `
   -webkit-user-drag: none;
 }
 
-/* Scrollbar – WebKit */
+/* ---- Scrollbar: thin, auto-hiding, overlay ---- */
+.sv-scroll-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s;
+}
+.sv-scroll-viewport:hover {
+  scrollbar-color: var(--sv-scrollbar-thumb, rgba(99, 102, 241, 0.5)) transparent;
+}
+
+/* WebKit (Chrome, Edge, Safari) */
 .sv-scroll-viewport::-webkit-scrollbar {
-  height: 12px;
+  height: 6px;
+  background: transparent;
 }
 .sv-scroll-viewport::-webkit-scrollbar-track {
-  background: var(--sv-scrollbar-track, #2d2d4a);
-  border-radius: 6px;
+  background: transparent;
 }
 .sv-scroll-viewport::-webkit-scrollbar-thumb {
-  background: var(--sv-scrollbar-thumb, #6366f1);
-  border-radius: 6px;
-  min-width: 40px;
+  background: transparent;
+  border-radius: 3px;
+  transition: background 0.3s;
+}
+.sv-scroll-viewport:hover::-webkit-scrollbar-thumb {
+  background: var(--sv-scrollbar-thumb, rgba(99, 102, 241, 0.45));
 }
 .sv-scroll-viewport::-webkit-scrollbar-thumb:hover {
-  background: var(--sv-scrollbar-thumb-hover, #818cf8);
+  background: var(--sv-scrollbar-thumb-hover, rgba(99, 102, 241, 0.7));
+}
+
+/* ---- Fade edges on viewport ---- */
+.sv-wrapper {
+  --sv-fade-width: 12px;
+}
+.sv-wrapper::before,
+.sv-wrapper::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--sv-fade-width);
+  pointer-events: none;
+  z-index: 40;
+  opacity: 0.7;
+}
+.sv-wrapper::before {
+  left: 0;
+  background: linear-gradient(to right, var(--sv-bg, #0f0f1a), transparent);
+}
+.sv-wrapper::after {
+  right: 0;
+  background: linear-gradient(to left, var(--sv-bg, #0f0f1a), transparent);
 }
 
 /* Region handles highlight on hover */
