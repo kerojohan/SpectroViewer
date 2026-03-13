@@ -1,26 +1,75 @@
 # SpectroViewer
 
-Lightweight, framework-agnostic spectrogram viewer with regions, timeline, and media synchronization.
+Framework-agnostic spectrogram viewer with regions, timeline, frequency axis,
+and media synchronization.
 
-**~10 KB gzipped** – Built for bioacoustics, audio analysis, and anywhere you need to visualize pre-rendered spectrograms with interactive annotations.
+This branch, `spectrogram-v2-ratpenats`, is the Ratpenats fork. It no longer
+expects pre-rendered spectrogram images. It renders spectrogram data tiles on
+`canvas` from quantized spectral data delivered by the backend.
 
 ![SpectroViewer – dark theme with frequency grid](docs/screenshot-dark.png)
 
-## Features
+## Branch Scope
 
-- **Pre-rendered spectrogram images** – Load segmented WebP/PNG images with automatic lazy loading via IntersectionObserver
-- **Interactive regions** – Draggable, resizable time-range annotations with full CRUD support
-- **Timeline** – Adaptive time axis that adjusts tick density to the zoom level
-- **Frequency axis** – Dynamic labels (auto-generated or explicit) with configurable Hz range
-- **Frequency grid** – Horizontal guide lines across the spectrogram at each frequency label
-- **Playhead cursor** – Smooth cursor synced to media playback at 60 fps via requestAnimationFrame
-- **Hover crosshair** – Shows precise time at pointer position
-- **Media synchronization** – Attach any `<audio>` or `<video>` element for playback control
-- **Auto-scroll / auto-center** – Keeps the playhead visible during playback
-- **Zoom** – Pixels-per-second zoom with synchronized spectrogram, regions, and timeline
-- **Dark / Light themes** – Built-in themes or fully custom color tokens
-- **Zero dependencies** – Pure TypeScript, no runtime dependencies
-- **Framework-agnostic** – Works with vanilla JS, Angular, React, Vue, Svelte, etc.
+This branch diverges from upstream in one important way:
+
+- Upstream: spectrogram image segments (`webp/png/jpeg`)
+- This branch: spectrogram data tiles (`uint8`) + `metadata.v2.json`
+
+The interaction model is still the same:
+
+- timeline
+- cursor
+- frequency axis
+- frequency grid
+- regions
+- audio/video sync
+- scroll and zoom
+
+## Spectrogram v2 Format
+
+The viewer expects metadata shaped like this:
+
+```json
+{
+  "format": "spectrogram-v2",
+  "version": 2,
+  "sampleRate": 250000,
+  "fftSize": 4096,
+  "hopLength": 128,
+  "freqMin": 0,
+  "freqMax": 125000,
+  "bins": 1024,
+  "dbMin": -110.0,
+  "dbMax": -20.0,
+  "tileDuration": 5.0,
+  "totalDuration": 60.0,
+  "tileFormat": {
+    "encoding": "raw",
+    "dtype": "uint8",
+    "layout": "time-major",
+    "endianness": "little"
+  },
+  "tiles": [
+    {
+      "index": 0,
+      "file": "/api/sessions/123/spectrogram/tile/tiles/tile_000000.bin",
+      "startTime": 0.0,
+      "endTime": 5.0,
+      "duration": 5.0,
+      "frames": 2048,
+      "bins": 1024
+    }
+  ]
+}
+```
+
+Tile contract:
+
+- Each tile is a `Uint8Array`
+- Layout is `time-major`
+- Size must be exactly `frames * bins`
+- Values are expected to already be normalized to `0..255`
 
 ## Install
 
@@ -28,15 +77,15 @@ Lightweight, framework-agnostic spectrogram viewer with regions, timeline, and m
 npm install spectro-viewer
 ```
 
-Or use the UMD build via `<script>` tag:
+For this branch in Ratpenats:
 
-```html
-<script src="spectro-viewer.umd.cjs"></script>
+```bash
+npm install https://codeload.github.com/kerojohan/SpectroViewer/tar.gz/refs/heads/spectrogram-v2-ratpenats
 ```
 
 ## Quick Start
 
-```typescript
+```ts
 import { SpectroViewer } from 'spectro-viewer';
 
 const viewer = SpectroViewer.create({
@@ -47,20 +96,16 @@ const viewer = SpectroViewer.create({
   frequencyAxis: { min: 0, max: 125000 },
 });
 
-// Load pre-rendered spectrogram segments
-viewer.loadSpectrogram({
-  files: [
-    { url: '/spectrograms/seg_0000.webp', startTime: 0, duration: 10, width: 2000, height: 400 },
-    { url: '/spectrograms/seg_0001.webp', startTime: 10, duration: 10, width: 2000, height: 400 },
-    // ...
-  ],
-  totalDuration: 120,
+const metadata = await fetch('/api/sessions/123/spectrogram/metadata').then((r) => r.json());
+
+viewer.loadSpectrogramData({
+  ...metadata,
+  lazyLoad: true,
+  lazyMargin: 300,
 });
 
-// Sync with a video/audio element
-viewer.syncMedia(document.querySelector('video'));
+viewer.syncMedia(document.querySelector('video')!);
 
-// Add annotation regions
 viewer.addRegion({
   id: 'detection-1',
   start: 5.2,
@@ -68,20 +113,6 @@ viewer.addRegion({
   color: 'rgba(239, 68, 68, 0.15)',
   draggable: true,
   resizable: true,
-  content: '<span class="badge">3</span>',
-});
-
-// Listen to events
-viewer.on('region:created', (region) => {
-  console.log('New region:', region.start, region.end);
-});
-
-viewer.on('region:updated', (region) => {
-  console.log('Region moved/resized:', region.id);
-});
-
-viewer.on('timeupdate', (time) => {
-  console.log('Current time:', time);
 });
 ```
 
@@ -91,10 +122,10 @@ viewer.on('timeupdate', (time) => {
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `container` | `string \| HTMLElement` | *required* | CSS selector or element |
+| `container` | `string \| HTMLElement` | required | CSS selector or element |
 | `height` | `number` | `400` | Spectrogram area height in pixels |
 | `pixelsPerSecond` | `number` | `100` | Initial zoom level |
-| `duration` | `number` | – | Explicit duration (seconds) |
+| `duration` | `number` | – | Explicit duration in seconds |
 | `theme` | `'dark' \| 'light' \| ThemeColors` | `'dark'` | Color theme |
 | `timeline` | `TimelineConfig \| false` | `{}` | Timeline settings or disabled |
 | `frequencyAxis` | `FrequencyAxisConfig \| false` | `{}` | Frequency axis settings or disabled |
@@ -104,185 +135,91 @@ viewer.on('timeupdate', (time) => {
 | `frequencyGrid` | `FrequencyGridConfig \| false` | `{}` | Frequency grid lines or disabled |
 | `regions` | `RegionsConfig \| false` | `{}` | Regions settings or disabled |
 
-### Methods
+### Spectrogram Methods
 
-#### Spectrogram
+- `loadSpectrogram(data: SpectrogramData)` – Load spectrogram v2 metadata
+- `loadSpectrogramData(data: SpectrogramData)` – Alias for the same operation
 
-- `loadSpectrogram(data: SpectrogramData)` – Load spectrogram image segments
+### Playback Methods
 
-#### Playback
+- `syncMedia(element: HTMLMediaElement)`
+- `play()`
+- `pause()`
+- `playPause()`
+- `setTime(seconds)`
+- `setPlaybackRate(rate)`
+- `currentTime`
+- `duration`
+- `isPlaying`
 
-- `syncMedia(element: HTMLMediaElement)` – Sync with audio/video element
-- `play()` / `pause()` / `playPause()` – Playback controls
-- `setTime(seconds)` – Seek to time
-- `setPlaybackRate(rate)` – Set speed (0.25x, 0.5x, 1x, 2x, etc.)
-- `currentTime` / `duration` / `isPlaying` – Read-only properties
+### Zoom and Scroll Methods
 
-#### Zoom & Scroll
+- `zoom(pixelsPerSecond)`
+- `getZoom()`
+- `scrollToTime(time, { center?, smooth? })`
+- `setAutoScroll(enabled)`
+- `setAutoCenter(enabled)`
 
-- `zoom(pixelsPerSecond)` – Set zoom level
-- `getZoom()` – Get current zoom level
-- `scrollToTime(time, { center?, smooth? })` – Scroll to a specific time
-- `setAutoScroll(enabled)` / `setAutoCenter(enabled)` – Toggle scroll behavior
+### Region Methods
 
-#### Regions
-
-- `addRegion(options: RegionOptions)` – Add annotation region
-- `removeRegion(id)` – Remove a region
-- `clearRegions()` – Remove all regions
-- `getRegion(id)` / `getRegions()` – Query regions
-- `selectRegion(id | null)` – Select/deselect a region
-- `enableDragSelection()` / `disableDragSelection()` – Toggle drag-to-create
-
-#### Frequency Axis
-
-- `updateFrequencyAxis(config)` – Update axis labels/range dynamically
-
-#### Lifecycle
-
-- `destroy()` – Clean up and remove from DOM
+- `addRegion(options)`
+- `removeRegion(id)`
+- `clearRegions()`
+- `getRegion(id)`
+- `getRegions()`
+- `selectRegion(id | null)`
+- `enableDragSelection()`
+- `disableDragSelection()`
 
 ### Events
 
-| Event | Args | Description |
-|-------|------|-------------|
-| `ready` | – | Spectrogram loaded and viewer ready |
-| `destroy` | – | Viewer destroyed |
-| `timeupdate` | `time: number` | Current playback time changed |
-| `zoom` | `pixelsPerSecond: number` | Zoom level changed |
-| `scroll` | `scrollLeft: number` | Scroll position changed |
-| `play` | – | Playback started |
-| `pause` | – | Playback paused |
-| `finish` | – | Playback reached end |
-| `region:created` | `region: Region` | New region created (via drag-selection) |
-| `region:updated` | `region: Region` | Region moved or resized |
-| `region:removed` | `region: Region` | Region removed |
-| `region:clicked` | `region: Region, event: MouseEvent` | Region clicked |
-| `region:selected` | `region: Region \| null` | Region selection changed |
-| `region:drag-start` | `region: Region` | Region drag started |
-| `region:drag-end` | `region: Region` | Region drag ended |
+- `ready`
+- `destroy`
+- `timeupdate`
+- `zoom`
+- `scroll`
+- `play`
+- `pause`
+- `finish`
+- `region:created`
+- `region:updated`
+- `region:removed`
+- `region:clicked`
+- `region:selected`
+- `region:drag-start`
+- `region:drag-end`
 
-## Frequency Axis Configuration
+## Rendering Notes
 
-```typescript
-// Auto-generated labels
-SpectroViewer.create({
-  frequencyAxis: { min: 0, max: 125000, labels: 'auto', labelCount: 6 }
-});
+This branch renders spectrogram data this way:
 
-// Explicit labels
-SpectroViewer.create({
-  frequencyAxis: { min: 0, max: 125000, labels: [0, 25000, 50000, 75000, 105000, 125000] }
-});
+1. Tiles are fetched lazily from the backend.
+2. Raw `uint8` values are decoded from `ArrayBuffer`.
+3. A color lookup table is applied on the client.
+4. The tile is painted into a `canvas`.
 
-// Custom formatter
-SpectroViewer.create({
-  frequencyAxis: {
-    min: 0,
-    max: 125000,
-    formatLabel: (hz) => hz >= 1000 ? `${hz / 1000}k` : `${hz}`,
-  }
-});
+Current limitations of this branch:
+
+- The built-in renderer currently uses a magma-style LUT.
+- Tile encoding is expected to be raw `uint8`.
+- Compression-aware tile decoders such as `zstd` are not implemented yet.
+
+## Ratpenats Integration
+
+This branch was created for `RatpenatsSpectroViewer`.
+
+Expected backend endpoints:
+
+- `GET /api/sessions/{id}/spectrogram/metadata`
+- `GET /api/sessions/{id}/spectrogram/tile/{filename}`
+
+Expected metadata file:
+
+- `spectroviewer/metadata.v2.json`
+
+## Development
+
+```bash
+npm install
+npm run build
 ```
-
-## Frequency Grid Configuration
-
-```typescript
-// Default: auto lines derived from frequency axis labels
-SpectroViewer.create({
-  frequencyAxis: { min: 0, max: 125000 },
-  frequencyGrid: {}, // enabled by default
-});
-
-// Custom lines at specific frequencies
-SpectroViewer.create({
-  frequencyGrid: {
-    lines: [20000, 40000, 60000, 80000, 100000],
-    color: '#a5b4fc',
-    opacity: 0.4,
-    dashPattern: [6, 3],
-    showLabels: true,
-  }
-});
-
-// Disable grid
-SpectroViewer.create({
-  frequencyGrid: false,
-});
-```
-
-## Custom Themes
-
-```typescript
-SpectroViewer.create({
-  theme: {
-    background: '#1a1a2e',
-    text: '#e2e8f0',
-    cursorColor: '#ef4444',
-    regionColor: 'rgba(239, 68, 68, 0.15)',
-    regionSelectedColor: 'rgba(59, 130, 246, 0.2)',
-    // ... see ThemeColors type for all tokens
-  }
-});
-```
-
-## Use with Frameworks
-
-### Angular
-
-```typescript
-@Component({ ... })
-export class ViewerComponent implements AfterViewInit, OnDestroy {
-  private viewer!: SpectroViewer;
-
-  ngAfterViewInit() {
-    this.viewer = SpectroViewer.create({ container: '#viewer' });
-    this.viewer.loadSpectrogram(this.spectrogramData);
-  }
-
-  ngOnDestroy() {
-    this.viewer.destroy();
-  }
-}
-```
-
-### React
-
-```tsx
-function Viewer({ spectrogramData }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<SpectroViewer>();
-
-  useEffect(() => {
-    viewerRef.current = SpectroViewer.create({ container: containerRef.current! });
-    viewerRef.current.loadSpectrogram(spectrogramData);
-    return () => viewerRef.current?.destroy();
-  }, []);
-
-  return <div ref={containerRef} />;
-}
-```
-
-## Generating Spectrograms
-
-SpectroViewer expects pre-rendered image segments. You can generate them with any tool. Here's an example with Python + scipy:
-
-```python
-from scipy import signal
-import matplotlib.pyplot as plt
-import numpy as np
-
-def generate_segment(audio, sample_rate, output_path, freq_max=125000):
-    f, t, Sxx = signal.spectrogram(audio, fs=sample_rate, nperseg=4096, noverlap=3072)
-    Sxx_db = 10 * np.log10(Sxx + 1e-10)
-    
-    fig, ax = plt.subplots(figsize=(len(audio)/sample_rate * 2, 4), dpi=100)
-    ax.imshow(Sxx_db, aspect='auto', origin='lower', cmap='magma')
-    ax.axis('off')
-    fig.savefig(output_path, format='webp', bbox_inches='tight', pad_inches=0)
-    plt.close(fig)
-```
-
-## License
-
-MIT

@@ -87,7 +87,7 @@
 </head>
 <body>
   <h1>SpectroViewer Demo</h1>
-  <p class="subtitle">Lightweight spectrogram viewer with regions, timeline, and media sync.</p>
+  <p class="subtitle">Canvas-rendered spectrogram viewer using spectrogram-v2 data tiles.</p>
 
   <div class="controls">
     <div class="control-group">
@@ -128,74 +128,83 @@
     <div id="regions-content"><p class="empty">No regions yet. Click "Add Region" then drag on the spectrogram.</p></div>
   </div>
 
-  <!-- Load from built dist -->
   <script src="../dist/spectro-viewer.umd.cjs"></script>
   <script>
-    // -----------------------------------------------------------------------
-    // DEMO: Generate synthetic spectrogram data using canvas
-    // In a real application you'd load pre-rendered images from your server.
-    // -----------------------------------------------------------------------
-    function generateDemoSpectrogram(segmentDuration, totalDuration) {
-      const files = [];
-      const pxPerSec = 200;
-      const height = 400;
+    function generateDemoMetadata(tileDuration, totalDuration, bins, framesPerTile) {
+      const tiles = [];
+      const tileStore = new Map();
 
-      for (let t = 0; t < totalDuration; t += segmentDuration) {
-        const dur = Math.min(segmentDuration, totalDuration - t);
-        const w = Math.round(dur * pxPerSec);
+      for (let startTime = 0, index = 0; startTime < totalDuration; startTime += tileDuration, index += 1) {
+        const duration = Math.min(tileDuration, totalDuration - startTime);
+        const frames = Math.max(1, Math.round(framesPerTile * (duration / tileDuration)));
+        const values = new Uint8Array(frames * bins);
 
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-
-        // Dark background gradient
-        const grad = ctx.createLinearGradient(0, 0, 0, height);
-        grad.addColorStop(0, '#1a0a2e');
-        grad.addColorStop(0.5, '#2d1b4e');
-        grad.addColorStop(1, '#1a0a2e');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, w, height);
-
-        // Simulated spectral content
-        for (let x = 0; x < w; x += 2) {
-          const time = t + (x / pxPerSec);
-          for (let y = 0; y < height; y += 2) {
-            const freq = 1 - (y / height);
-            const intensity =
-              Math.sin(time * 3 + freq * 20) * 0.3 +
-              Math.sin(time * 7 + freq * 50) * 0.2 +
-              Math.exp(-((freq - 0.4 - 0.1 * Math.sin(time * 2)) ** 2) / 0.01) * 0.8 +
-              Math.exp(-((freq - 0.7 - 0.05 * Math.cos(time * 1.5)) ** 2) / 0.005) * 0.6;
-
-            const v = Math.max(0, Math.min(1, intensity));
-            if (v > 0.15) {
-              const r = Math.round(50 + v * 200);
-              const g = Math.round(v * 100);
-              const b = Math.round(80 + v * 150);
-              ctx.fillStyle = `rgba(${r},${g},${b},${v})`;
-              ctx.fillRect(x, y, 2, 2);
-            }
+        for (let frame = 0; frame < frames; frame += 1) {
+          const time = startTime + (frame / frames) * duration;
+          for (let bin = 0; bin < bins; bin += 1) {
+            const freq = bin / bins;
+            const signalA = Math.exp(-((freq - 0.30 - 0.06 * Math.sin(time * 1.8)) ** 2) / 0.0025) * 180;
+            const signalB = Math.exp(-((freq - 0.62 - 0.04 * Math.cos(time * 1.2)) ** 2) / 0.0015) * 210;
+            const noise = Math.max(0, Math.sin(time * 5 + freq * 22) * 20 + 12);
+            values[frame * bins + bin] = Math.max(0, Math.min(255, Math.round(signalA + signalB + noise)));
           }
         }
 
-        files.push({
-          url: canvas.toDataURL('image/webp', 0.8),
-          width: w,
-          height,
-          startTime: t,
-          duration: dur,
+        const file = `demo://tile/${index}`;
+        tileStore.set(file, values);
+        tiles.push({
+          index,
+          file,
+          startTime,
+          endTime: startTime + duration,
+          duration,
+          frames,
+          bins,
         });
       }
 
-      return { files, totalDuration };
+      return {
+        metadata: {
+          format: 'spectrogram-v2',
+          version: 2,
+          sampleRate: 250000,
+          fftSize: 4096,
+          hopLength: 128,
+          freqMin: 0,
+          freqMax: 125000,
+          bins,
+          dbMin: -110,
+          dbMax: -20,
+          tileDuration,
+          framesPerTile,
+          totalDuration,
+          tileFormat: {
+            encoding: 'raw',
+            dtype: 'uint8',
+            layout: 'time-major',
+            endianness: 'little',
+          },
+          tiles,
+        },
+        tileStore,
+      };
     }
 
-    // -----------------------------------------------------------------------
-    // Create viewer
-    // -----------------------------------------------------------------------
-    const { SpectroViewer } = window.SpectroViewer ? window : { SpectroViewer: window.SpectroViewer };
     const SV = window.SpectroViewer?.SpectroViewer || window.SpectroViewer;
+    const realFetch = window.fetch.bind(window);
+    const { metadata, tileStore } = generateDemoMetadata(5, 60, 256, 640);
+
+    window.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input.url;
+      if (tileStore.has(url)) {
+        const bytes = tileStore.get(url);
+        return new Response(bytes, {
+          status: 200,
+          headers: { 'Content-Type': 'application/octet-stream' },
+        });
+      }
+      return realFetch(input, init);
+    };
 
     const viewer = SV.create({
       container: '#viewer-container',
@@ -206,9 +215,11 @@
       regions: { draggable: true, resizable: true },
     });
 
-    // Generate 60 seconds of demo spectrogram data
-    const spectrogramData = generateDemoSpectrogram(10, 60);
-    viewer.loadSpectrogram(spectrogramData);
+    viewer.loadSpectrogramData({
+      ...metadata,
+      lazyLoad: true,
+      lazyMargin: 300,
+    });
 
     // -----------------------------------------------------------------------
     // Controls
@@ -236,8 +247,8 @@
       timeDisplay.textContent = `${fmt(time)} / ${fmtShort(viewer.duration)}`;
     });
 
-    // Note: play/pause won't work without a real media element
-    // This demo shows the viewer's visual capabilities
+    // Note: play/pause won't work without a real media element.
+    // This page only demonstrates the spectrogram-v2 renderer and regions.
 
     document.getElementById('zoom').addEventListener('input', (e) => {
       const val = Number(e.target.value);
