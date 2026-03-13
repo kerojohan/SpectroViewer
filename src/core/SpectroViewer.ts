@@ -230,7 +230,7 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
   // =========================================================================
 
   loadSpectrogram(data: SpectrogramData): void {
-    const totalDuration = data.totalDuration ?? data.files.reduce((s, f) => s + f.duration, 0);
+    const totalDuration = data.totalDuration;
     this._duration = totalDuration;
 
     this.spectrogramLayer.load(data);
@@ -244,6 +244,10 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
     }
 
     this.emit('ready');
+  }
+
+  loadSpectrogramData(data: SpectrogramData): void {
+    this.loadSpectrogram(data);
   }
 
   // =========================================================================

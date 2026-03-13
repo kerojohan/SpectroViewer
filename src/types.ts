@@ -2,25 +2,50 @@
 // SpectroViewer – Public type definitions
 // ---------------------------------------------------------------------------
 
-/** Descriptor for a single pre-rendered spectrogram image segment. */
-export interface SpectrogramFileDescriptor {
-  /** URL or path to the image (WebP, PNG, JPEG …). */
-  url: string;
-  /** Width in pixels at the native resolution. */
-  width: number;
-  /** Height in pixels at the native resolution. */
-  height: number;
-  /** Time offset in seconds where this segment begins. */
+export interface SpectrogramTileDescriptor {
+  /** Tile URL, already rewritten by the API to a fetchable endpoint. */
+  file: string;
+  /** Time offset in seconds where this tile begins. */
   startTime: number;
-  /** Duration in seconds covered by this segment. */
+  /** End time in seconds for this tile. */
+  endTime: number;
+  /** Duration in seconds covered by this tile. */
   duration: number;
+  /** Number of time frames encoded in the tile. */
+  frames: number;
+  /** Number of frequency bins encoded in the tile. */
+  bins: number;
 }
 
-/** Payload passed to `viewer.loadSpectrogram()`. */
+export interface SpectrogramTileFormat {
+  encoding: 'raw' | 'zstd';
+  dtype: 'uint8';
+  layout: 'time-major';
+  endianness?: 'little' | 'big';
+}
+
+/** Payload passed to `viewer.loadSpectrogram()` in the v2 data-tile format. */
 export interface SpectrogramData {
-  files: SpectrogramFileDescriptor[];
-  /** Total duration in seconds (if omitted, calculated from files). */
-  totalDuration?: number;
+  format: 'spectrogram-v2';
+  version: number;
+  audioFile?: string;
+  sampleRate: number;
+  fftSize: number;
+  hopLength: number;
+  window?: string;
+  freqMin: number;
+  freqMax: number;
+  bins: number;
+  dbMin: number;
+  dbMax: number;
+  tileDuration: number;
+  framesPerTile?: number;
+  bytesPerTile?: number;
+  height?: number;
+  minPixelsPerSecond?: number;
+  totalDuration: number;
+  tileFormat: SpectrogramTileFormat;
+  tiles: SpectrogramTileDescriptor[];
   /** Enable lazy-loading via IntersectionObserver (default `true`). */
   lazyLoad?: boolean;
   /** Pre-load margin in pixels for lazy loading (default `300`). */

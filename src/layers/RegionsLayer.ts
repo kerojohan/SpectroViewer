@@ -71,7 +71,7 @@ export class RegionsLayer extends EventEmitter<RegionEvents> {
 
     const el = document.createElement('div');
     el.className = 'sv-region';
-    el.dataset.regionId = opts.id;
+    el.dataset['regionId'] = opts.id;
 
     const handleLeft = document.createElement('div');
     handleLeft.className = 'sv-region-handle sv-region-handle-left';

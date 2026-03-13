@@ -1,17 +1,20 @@
-import type { SpectrogramData, SpectrogramFileDescriptor, ThemeColors } from '../types';
+import type { SpectrogramData, SpectrogramTileDescriptor, ThemeColors } from '../types';
 
 /**
- * Renders pre-generated spectrogram image segments inside the scroll container.
+ * Renders spectrogram data tiles into canvases inside the scroll container.
  * Supports lazy loading via IntersectionObserver and zoom-aware resizing.
  */
 export class SpectrogramLayer {
   private wrapper: HTMLElement;
   private container: HTMLElement;
   private observer: IntersectionObserver | null = null;
-  private images: HTMLImageElement[] = [];
+  private canvases: HTMLCanvasElement[] = [];
   private data: SpectrogramData | null = null;
   private pxPerSec: number;
   private height: number;
+  private tileCache = new Map<string, Uint8Array>();
+  private pendingLoads = new Map<string, Promise<Uint8Array>>();
+  private lut = buildMagmaLut();
 
   constructor(
     private scrollContent: HTMLElement,
@@ -45,7 +48,6 @@ export class SpectrogramLayer {
       zIndex: '1',
     });
     Object.assign(this.container.style, {
-      display: 'flex',
       height: '100%',
       position: 'absolute',
       top: '0',
@@ -57,7 +59,7 @@ export class SpectrogramLayer {
     this.data = data;
     this.clear();
 
-    const totalDuration = data.totalDuration ?? data.files.reduce((s, f) => s + f.duration, 0);
+    const totalDuration = data.totalDuration;
     const totalWidth = totalDuration * this.pxPerSec;
 
     this.wrapper.style.width = `${totalWidth}px`;
@@ -71,48 +73,54 @@ export class SpectrogramLayer {
         (entries) => {
           for (const entry of entries) {
             if (!entry.isIntersecting) continue;
-            const img = entry.target as HTMLImageElement;
-            const src = img.dataset.src;
-            if (src && !img.src) {
-              img.src = src;
+            const canvas = entry.target as HTMLCanvasElement;
+            const tile = this.data?.tiles.find((item) => item.file === canvas.dataset['tileFile']);
+            if (tile) {
+              void this.renderTile(canvas, tile);
             }
-            this.observer?.unobserve(img);
+            this.observer?.unobserve(canvas);
           }
         },
         { root: this.scrollViewport, rootMargin: `${lazyMargin}px`, threshold: 0 },
       );
     }
 
-    for (const file of data.files) {
-      const img = this.createImage(file, lazyLoad);
-      this.container.appendChild(img);
-      this.images.push(img);
-      if (lazyLoad) this.observer?.observe(img);
+    for (const tile of data.tiles) {
+      const canvas = this.createCanvas(tile, lazyLoad);
+      this.container.appendChild(canvas);
+      this.canvases.push(canvas);
+      if (lazyLoad) {
+        this.observer?.observe(canvas);
+      } else {
+        void this.renderTile(canvas, tile);
+      }
     }
   }
 
-  private createImage(file: SpectrogramFileDescriptor, lazy: boolean): HTMLImageElement {
-    const img = document.createElement('img');
-    const w = file.duration * this.pxPerSec;
+  private createCanvas(tile: SpectrogramTileDescriptor, lazy: boolean): HTMLCanvasElement {
+    const canvas = document.createElement('canvas');
+    const width = tile.duration * this.pxPerSec;
+    const left = tile.startTime * this.pxPerSec;
 
-    Object.assign(img.style, {
+    Object.assign(canvas.style, {
       height: '100%',
-      width: `${w}px`,
+      width: `${width}px`,
+      left: `${left}px`,
+      top: '0',
+      position: 'absolute',
       objectFit: 'fill',
       background: this.theme.background,
       display: 'block',
-      flexShrink: '0',
     });
 
-    img.draggable = false;
-    img.alt = '';
+    canvas.dataset['tileFile'] = tile.file;
+    canvas.dataset['frames'] = String(tile.frames);
+    canvas.dataset['bins'] = String(tile.bins);
 
     if (lazy) {
-      img.dataset.src = file.url;
-    } else {
-      img.src = file.url;
+      canvas.dataset['pending'] = 'true';
     }
-    return img;
+    return canvas;
   }
 
   /** Recalculate widths when zoom changes. */
@@ -120,30 +128,98 @@ export class SpectrogramLayer {
     this.pxPerSec = pxPerSec;
     if (!this.data) return;
 
-    const totalDuration = this.data.totalDuration ?? this.data.files.reduce((s, f) => s + f.duration, 0);
+    const totalDuration = this.data.totalDuration;
     const totalWidth = totalDuration * pxPerSec;
 
     this.wrapper.style.width = `${totalWidth}px`;
     this.container.style.width = `${totalWidth}px`;
 
-    this.data.files.forEach((file, i) => {
-      const img = this.images[i];
-      if (img) {
-        img.style.width = `${file.duration * pxPerSec}px`;
+    this.data.tiles.forEach((tile, i) => {
+      const canvas = this.canvases[i];
+      if (canvas) {
+        canvas.style.left = `${tile.startTime * pxPerSec}px`;
+        canvas.style.width = `${tile.duration * pxPerSec}px`;
       }
     });
   }
 
   getTotalWidth(): number {
     if (!this.data) return 0;
-    const d = this.data.totalDuration ?? this.data.files.reduce((s, f) => s + f.duration, 0);
-    return d * this.pxPerSec;
+    return this.data.totalDuration * this.pxPerSec;
+  }
+
+  private async renderTile(canvas: HTMLCanvasElement, tile: SpectrogramTileDescriptor): Promise<void> {
+    if (canvas.dataset['rendered'] === 'true') return;
+
+    try {
+      const raw = await this.getTileData(tile.file, tile.frames * tile.bins);
+      if (!canvas.isConnected) return;
+
+      const image = new ImageData(tile.frames, tile.bins);
+      const pixels = image.data;
+
+      for (let frame = 0; frame < tile.frames; frame += 1) {
+        const sourceBase = frame * tile.bins;
+        for (let y = 0; y < tile.bins; y += 1) {
+          const sourceBin = tile.bins - 1 - y;
+          const value = raw[sourceBase + sourceBin];
+          const pixelBase = (y * tile.frames + frame) * 4;
+          const lutBase = value * 4;
+
+          pixels[pixelBase] = this.lut[lutBase];
+          pixels[pixelBase + 1] = this.lut[lutBase + 1];
+          pixels[pixelBase + 2] = this.lut[lutBase + 2];
+          pixels[pixelBase + 3] = 255;
+        }
+      }
+
+      canvas.width = tile.frames;
+      canvas.height = tile.bins;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.imageSmoothingEnabled = false;
+      ctx.putImageData(image, 0, 0);
+      canvas.dataset['rendered'] = 'true';
+    } catch {
+      canvas.dataset['error'] = 'true';
+    }
+  }
+
+  private async getTileData(url: string, expectedBytes: number): Promise<Uint8Array> {
+    const cached = this.tileCache.get(url);
+    if (cached) return cached;
+
+    const pending = this.pendingLoads.get(url);
+    if (pending) return pending;
+
+    const loadPromise = fetch(url)
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to load tile: ${response.status}`);
+        }
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.byteLength !== expectedBytes) {
+          throw new Error(`Unexpected tile size for ${url}`);
+        }
+        this.tileCache.set(url, bytes);
+        this.pendingLoads.delete(url);
+        return bytes;
+      })
+      .catch((error) => {
+        this.pendingLoads.delete(url);
+        throw error;
+      });
+
+    this.pendingLoads.set(url, loadPromise);
+    return loadPromise;
   }
 
   private clear(): void {
     this.observer?.disconnect();
     this.observer = null;
-    this.images = [];
+    this.canvases = [];
     this.container.innerHTML = '';
   }
 
@@ -151,4 +227,38 @@ export class SpectrogramLayer {
     this.clear();
     this.wrapper.remove();
   }
+}
+
+function buildMagmaLut(): Uint8ClampedArray {
+  const stops: Array<[number, number, number]> = [
+    [0, 0, 4],
+    [28, 16, 68],
+    [79, 18, 123],
+    [129, 37, 129],
+    [181, 54, 122],
+    [229, 80, 100],
+    [251, 135, 97],
+    [254, 194, 135],
+    [252, 253, 191],
+  ];
+
+  const lut = new Uint8ClampedArray(256 * 4);
+  const segments = stops.length - 1;
+
+  for (let i = 0; i < 256; i += 1) {
+    const position = i / 255;
+    const scaled = position * segments;
+    const index = Math.min(segments - 1, Math.floor(scaled));
+    const t = scaled - index;
+    const start = stops[index];
+    const end = stops[index + 1];
+    const base = i * 4;
+
+    lut[base] = Math.round(start[0] + (end[0] - start[0]) * t);
+    lut[base + 1] = Math.round(start[1] + (end[1] - start[1]) * t);
+    lut[base + 2] = Math.round(start[2] + (end[2] - start[2]) * t);
+    lut[base + 3] = 255;
+  }
+
+  return lut;
 }
