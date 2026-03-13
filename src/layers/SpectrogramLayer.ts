@@ -21,6 +21,7 @@ export class SpectrogramLayer {
   private tileCache = new Map<string, Uint8Array>();
   private pendingLoads = new Map<string, Promise<Uint8Array>>();
   private lut = buildColorLut('magma');
+  private backgroundColor = getColormapBackground('magma');
   private prefetchMargin = 1200;
   private renderQueued = false;
   private tileIndex = new Map<string, SpectrogramTileDescriptor>();
@@ -36,7 +37,9 @@ export class SpectrogramLayer {
     this.pxPerSec = pxPerSec;
     this.height = height;
     this.prefetchMargin = config?.prefetchMargin ?? this.prefetchMargin;
-    this.lut = buildColorLut(config?.colormap ?? 'magma');
+    const initialColormap = config?.colormap ?? 'magma';
+    this.lut = buildColorLut(initialColormap);
+    this.backgroundColor = getColormapBackground(initialColormap);
 
     this.wrapper = document.createElement('div');
     this.wrapper.className = 'sv-spectrogram-wrapper';
@@ -59,12 +62,14 @@ export class SpectrogramLayer {
       overflow: 'hidden',
       pointerEvents: 'none',
       zIndex: '1',
+      background: this.backgroundColor,
     });
     Object.assign(this.container.style, {
       height: '100%',
       position: 'absolute',
       top: '0',
       left: '0',
+      background: this.backgroundColor,
     });
   }
 
@@ -72,8 +77,11 @@ export class SpectrogramLayer {
     this.data = data;
     this.clear();
     this.tileIndex = new Map(data.tiles.map((tile) => [tile.file, tile]));
-    this.lut = buildColorLut(data.colormap ?? 'magma');
+    const colormap = data.colormap ?? 'magma';
+    this.lut = buildColorLut(colormap);
+    this.backgroundColor = getColormapBackground(colormap);
     this.prefetchMargin = Math.max(data.lazyMargin ?? this.prefetchMargin, this.prefetchMargin);
+    this.applyBackgroundColor();
 
     const totalDuration = data.totalDuration;
     const totalWidth = totalDuration * this.pxPerSec;
@@ -127,7 +135,7 @@ export class SpectrogramLayer {
       top: '0',
       position: 'absolute',
       objectFit: 'fill',
-      background: this.theme.background,
+      background: this.backgroundColor || this.theme.background,
       display: 'block',
     });
 
@@ -170,6 +178,8 @@ export class SpectrogramLayer {
 
   setColormap(colormap: SpectrogramColorMap): void {
     this.lut = buildColorLut(colormap);
+    this.backgroundColor = getColormapBackground(colormap);
+    this.applyBackgroundColor();
 
     if (!this.data) return;
     this.data.colormap = colormap;
@@ -273,6 +283,15 @@ export class SpectrogramLayer {
     this.container.innerHTML = '';
   }
 
+  private applyBackgroundColor(): void {
+    const background = this.backgroundColor || this.theme.background;
+    this.wrapper.style.background = background;
+    this.container.style.background = background;
+    for (const canvas of this.canvases) {
+      canvas.style.background = background;
+    }
+  }
+
   destroy(): void {
     this.scrollViewport.removeEventListener('scroll', this.onViewportScroll);
     this.clear();
@@ -341,6 +360,11 @@ function buildColorLut(colormap: SpectrogramColorMap): Uint32Array {
   }
 
   return lut;
+}
+
+function getColormapBackground(colormap: SpectrogramColorMap): string {
+  const [r, g, b] = getColorStops(colormap)[0];
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 function getColorStops(colormap: SpectrogramColorMap): Array<[number, number, number]> {
