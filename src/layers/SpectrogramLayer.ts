@@ -159,6 +159,8 @@ export class SpectrogramLayer {
         canvas.style.width = `${tile.duration * pxPerSec}px`;
       }
     });
+
+    this.scheduleVisibleRender();
   }
 
   getTotalWidth(): number {
