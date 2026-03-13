@@ -6,6 +6,8 @@ export type {
   SpectrogramData,
   SpectrogramTileDescriptor,
   SpectrogramTileFormat,
+  SpectrogramColorMap,
+  SpectrogramRenderConfig,
   RegionOptions,
   Region,
   RegionsConfig,

@@ -24,6 +24,22 @@ export interface SpectrogramTileFormat {
   endianness?: 'little' | 'big';
 }
 
+export type SpectrogramColorMap =
+  | 'magma'
+  | 'inferno'
+  | 'viridis'
+  | 'plasma'
+  | 'turbo'
+  | 'gray'
+  | 'gray-inverse';
+
+export interface SpectrogramRenderConfig {
+  /** Client-side palette used to colorize uint8 values. */
+  colormap?: SpectrogramColorMap;
+  /** Extra pixels rendered beyond the viewport during scroll/seek. */
+  prefetchMargin?: number;
+}
+
 /** Payload passed to `viewer.loadSpectrogram()` in the v2 data-tile format. */
 export interface SpectrogramData {
   format: 'spectrogram-v2';
@@ -46,6 +62,7 @@ export interface SpectrogramData {
   totalDuration: number;
   tileFormat: SpectrogramTileFormat;
   tiles: SpectrogramTileDescriptor[];
+  colormap?: SpectrogramColorMap;
   /** Enable lazy-loading via IntersectionObserver (default `true`). */
   lazyLoad?: boolean;
   /** Pre-load margin in pixels for lazy loading (default `300`). */
@@ -204,6 +221,7 @@ export interface SpectroViewerOptions {
   hover?: HoverConfig | false;
   scroll?: ScrollConfig;
   regions?: RegionsConfig | false;
+  spectrogram?: SpectrogramRenderConfig;
 
   theme?: ThemeName | ThemeColors;
 }

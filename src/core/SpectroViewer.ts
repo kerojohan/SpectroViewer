@@ -2,6 +2,7 @@ import type {
   SpectroViewerOptions,
   SpectroViewerEvents,
   SpectrogramData,
+  SpectrogramColorMap,
   RegionOptions,
   Region,
   ThemeColors,
@@ -154,6 +155,7 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
       this.pxPerSec,
       this.spectrogramHeight,
       this.theme,
+      typeof opts.spectrogram === 'object' ? opts.spectrogram : undefined,
     );
 
     // Frequency grid (horizontal lines over the spectrogram)
@@ -248,6 +250,10 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
 
   loadSpectrogramData(data: SpectrogramData): void {
     this.loadSpectrogram(data);
+  }
+
+  setColormap(colormap: SpectrogramColorMap): void {
+    this.spectrogramLayer.setColormap(colormap);
   }
 
   // =========================================================================
