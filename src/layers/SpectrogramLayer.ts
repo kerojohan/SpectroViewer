@@ -185,28 +185,42 @@ export class SpectrogramLayer {
   }
 
   private async renderTile(canvas: HTMLCanvasElement, tile: SpectrogramTileDescriptor): Promise<void> {
-    if (canvas.dataset['rendered'] === 'true' || canvas.dataset['rendering'] === 'true') return;
+    const targetWidth = this.getRenderWidth(tile);
+    const targetHeight = this.getRenderHeight(tile);
+
+    if (
+      canvas.dataset['rendered'] === 'true'
+      && canvas.dataset['renderWidth'] === String(targetWidth)
+      && canvas.dataset['renderHeight'] === String(targetHeight)
+    ) {
+      return;
+    }
+    if (canvas.dataset['rendering'] === 'true') return;
 
     try {
       canvas.dataset['rendering'] = 'true';
       const raw = await this.getTileData(tile.file, tile.frames * tile.bins);
       if (!canvas.isConnected) return;
 
-      const image = new ImageData(tile.frames, tile.bins);
+      const image = new ImageData(targetWidth, targetHeight);
       const pixels = new Uint32Array(image.data.buffer);
+      const frameEdges = buildEdges(tile.frames, targetWidth);
+      const binEdges = buildEdges(tile.bins, targetHeight);
 
-      for (let frame = 0; frame < tile.frames; frame += 1) {
-        const sourceBase = frame * tile.bins;
-        for (let y = 0; y < tile.bins; y += 1) {
-          const sourceBin = tile.bins - 1 - y;
-          const value = raw[sourceBase + sourceBin];
-          const pixelBase = y * tile.frames + frame;
+      for (let y = 0; y < targetHeight; y += 1) {
+        const binStart = binEdges[y];
+        const binEnd = binEdges[y + 1];
+        for (let x = 0; x < targetWidth; x += 1) {
+          const frameStart = frameEdges[x];
+          const frameEnd = frameEdges[x + 1];
+          const value = maxPoolValue(raw, tile.bins, frameStart, frameEnd, binStart, binEnd);
+          const pixelBase = y * targetWidth + x;
           pixels[pixelBase] = this.lut[value];
         }
       }
 
-      canvas.width = tile.frames;
-      canvas.height = tile.bins;
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
 
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
@@ -214,6 +228,8 @@ export class SpectrogramLayer {
       ctx.imageSmoothingEnabled = false;
       ctx.putImageData(image, 0, 0);
       canvas.dataset['rendered'] = 'true';
+      canvas.dataset['renderWidth'] = String(targetWidth);
+      canvas.dataset['renderHeight'] = String(targetHeight);
     } catch {
       canvas.dataset['error'] = 'true';
     } finally {
@@ -292,6 +308,16 @@ export class SpectrogramLayer {
         void this.renderTile(canvas, tile);
       }
     });
+  }
+
+  private getRenderWidth(tile: SpectrogramTileDescriptor): number {
+    const displayWidth = Math.max(1, Math.round(tile.duration * this.pxPerSec * window.devicePixelRatio));
+    return Math.min(tile.frames, displayWidth);
+  }
+
+  private getRenderHeight(tile: SpectrogramTileDescriptor): number {
+    const displayHeight = Math.max(1, Math.round(this.height * window.devicePixelRatio));
+    return Math.min(tile.bins, displayHeight);
   }
 }
 
@@ -395,4 +421,42 @@ function getColorStops(colormap: SpectrogramColorMap): Array<[number, number, nu
 
 function packRgba(r: number, g: number, b: number, a: number): number {
   return r | (g << 8) | (b << 16) | (a << 24);
+}
+
+function buildEdges(sourceSize: number, targetSize: number): Uint32Array {
+  const edges = new Uint32Array(targetSize + 1);
+  for (let i = 0; i <= targetSize; i += 1) {
+    edges[i] = Math.min(sourceSize, Math.floor(i * sourceSize / targetSize));
+  }
+
+  for (let i = 0; i < targetSize; i += 1) {
+    if (edges[i + 1] <= edges[i]) {
+      edges[i + 1] = Math.min(sourceSize, edges[i] + 1);
+    }
+  }
+
+  return edges;
+}
+
+function maxPoolValue(
+  raw: Uint8Array,
+  bins: number,
+  frameStart: number,
+  frameEnd: number,
+  binStart: number,
+  binEnd: number,
+): number {
+  let maxValue = 0;
+
+  for (let frame = frameStart; frame < frameEnd; frame += 1) {
+    const rowBase = frame * bins;
+    for (let bin = binStart; bin < binEnd; bin += 1) {
+      const value = raw[rowBase + (bins - 1 - bin)];
+      if (value > maxValue) {
+        maxValue = value;
+      }
+    }
+  }
+
+  return maxValue;
 }
