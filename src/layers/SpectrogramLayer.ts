@@ -460,6 +460,18 @@ function getColorStops(colormap: SpectrogramColorMap): Array<[number, number, nu
         [255, 255, 255],
         [0, 0, 0],
       ];
+    case 'chiroptera':
+      return [
+        [1, 0, 5],
+        [8, 3, 30],
+        [16, 10, 58],
+        [10, 45, 95],
+        [0, 120, 130],
+        [60, 200, 50],
+        [255, 210, 0],
+        [255, 55, 30],
+        [255, 240, 255],
+      ];
     case 'magma':
     default:
       return [

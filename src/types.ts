@@ -31,7 +31,8 @@ export type SpectrogramColorMap =
   | 'plasma'
   | 'turbo'
   | 'gray'
-  | 'gray-inverse';
+  | 'gray-inverse'
+  | 'chiroptera';
 
 export interface SpectrogramRenderConfig {
   /** Client-side palette used to colorize uint8 values. */
