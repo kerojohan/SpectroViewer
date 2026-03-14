@@ -128,6 +128,23 @@ export interface FrequencyAxisConfig {
   formatLabel?: (hz: number) => string;
 }
 
+export interface FrequencyBandHighlight {
+  /** Lower bound in Hz. */
+  minHz: number;
+  /** Upper bound in Hz. */
+  maxHz: number;
+  /** Fill color for the band (default `'rgba(255, 200, 40, 0.07)'`). */
+  fillColor?: string;
+  /** Border line color (default `'rgba(255, 200, 40, 0.6)'`). */
+  borderColor?: string;
+  /** Border line width (default `1.5`). */
+  borderWidth?: number;
+  /** Optional label shown inside the band. */
+  label?: string;
+  /** Label color (default matches borderColor). */
+  labelColor?: string;
+}
+
 export interface FrequencyGridConfig {
   /** Explicit Hz values to draw lines at, or `'auto'` to derive from freq axis. */
   lines?: 'auto' | number[];
@@ -143,6 +160,8 @@ export interface FrequencyGridConfig {
   showLabels?: boolean;
   /** Custom label formatter. */
   formatLabel?: (hz: number) => string;
+  /** Highlighted frequency band(s) rendered as a tinted overlay. */
+  highlightBands?: FrequencyBandHighlight[];
 }
 
 export interface CursorConfig {
