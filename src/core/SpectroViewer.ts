@@ -254,6 +254,8 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
 
   setColormap(colormap: SpectrogramColorMap): void {
     this.spectrogramLayer.setColormap(colormap);
+    const bg = this.spectrogramLayer.getBackgroundColor();
+    this.root.style.background = bg;
   }
 
   // =========================================================================

@@ -168,7 +168,35 @@ export class SpectrogramLayer {
       }
     });
 
+    this.refreshObserverAfterZoom();
     this.scheduleVisibleRender();
+  }
+
+  /**
+   * After zoom, re-observe canvases whose rendered resolution no longer
+   * matches the current zoom so they re-render when scrolled into view.
+   */
+  private refreshObserverAfterZoom(): void {
+    if (!this.observer || !this.data) return;
+
+    this.observer.disconnect();
+
+    for (let i = 0; i < this.canvases.length; i++) {
+      const canvas = this.canvases[i];
+      const tile = this.data.tiles[i];
+      if (!canvas || !tile) continue;
+
+      const targetWidth = this.getRenderWidth(tile);
+      const targetHeight = this.getRenderHeight(tile);
+      const needsRender =
+        canvas.dataset['rendered'] !== 'true' ||
+        canvas.dataset['renderWidth'] !== String(targetWidth) ||
+        canvas.dataset['renderHeight'] !== String(targetHeight);
+
+      if (needsRender) {
+        this.observer.observe(canvas);
+      }
+    }
   }
 
   getTotalWidth(): number {
@@ -192,6 +220,10 @@ export class SpectrogramLayer {
       }
     }
     this.scheduleVisibleRender();
+  }
+
+  getBackgroundColor(): string {
+    return this.backgroundColor;
   }
 
   private async renderTile(canvas: HTMLCanvasElement, tile: SpectrogramTileDescriptor): Promise<void> {
@@ -240,8 +272,9 @@ export class SpectrogramLayer {
       canvas.dataset['rendered'] = 'true';
       canvas.dataset['renderWidth'] = String(targetWidth);
       canvas.dataset['renderHeight'] = String(targetHeight);
-    } catch {
+    } catch (err) {
       canvas.dataset['error'] = 'true';
+      console.warn('[SpectroViewer] renderTile failed:', err);
     } finally {
       delete canvas.dataset['rendering'];
     }

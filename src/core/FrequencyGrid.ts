@@ -22,6 +22,8 @@ export class FrequencyGrid {
   private maxHz: number;
   private labelCount: number;
   private currentWidth = 0;
+  private scrollViewport: HTMLElement | null = null;
+  private scrollHandler: (() => void) | null = null;
 
   constructor(
     private parent: HTMLElement,
@@ -48,9 +50,9 @@ export class FrequencyGrid {
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'sv-freq-grid';
     Object.assign(this.canvas.style, {
-      position: 'absolute',
-      top: '0',
+      position: 'sticky',
       left: '0',
+      top: '0',
       width: '100%',
       height: `${spectrogramHeight}px`,
       pointerEvents: 'none',
@@ -83,17 +85,29 @@ export class FrequencyGrid {
   /** Full render – call after zoom changes or initial load. */
   render(contentWidth: number): void {
     this.currentWidth = contentWidth;
+    this.paintGrid();
+  }
+
+  /**
+   * Paint the grid using the viewport width instead of the full content
+   * width. The canvas uses `position: sticky` so it stays within the
+   * visible area while the content scrolls underneath.
+   */
+  private paintGrid(): void {
     const dpr = window.devicePixelRatio || 1;
     const h = this.spectrogramHeight;
+    const viewport = this.parent.parentElement;
+    const drawWidth = viewport ? viewport.clientWidth : Math.min(this.currentWidth, 4000);
 
-    this.canvas.width = contentWidth * dpr;
+    this.canvas.width = drawWidth * dpr;
     this.canvas.height = h * dpr;
-    this.canvas.style.width = `${contentWidth}px`;
+    this.canvas.style.width = `${drawWidth}px`;
     this.canvas.style.height = `${h}px`;
 
     const ctx = this.ctx;
+    if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, contentWidth, h);
+    ctx.clearRect(0, 0, drawWidth, h);
 
     const values = this.resolveLines();
 
@@ -116,7 +130,7 @@ export class FrequencyGrid {
 
       ctx.beginPath();
       ctx.moveTo(0, y);
-      ctx.lineTo(contentWidth, y);
+      ctx.lineTo(drawWidth, y);
       ctx.stroke();
 
       if (this.showLabels) {
