@@ -34,11 +34,26 @@ export type SpectrogramColorMap =
   | 'gray-inverse'
   | 'chiroptera';
 
+export interface FrequencyEmphasis {
+  /** Lower frequency bound in Hz. */
+  minHz: number;
+  /** Upper frequency bound in Hz. */
+  maxHz: number;
+  /** Intensity multiplier applied to values in this range (default `1.5`). */
+  boost?: number;
+  /** Minimum frequency of the data in Hz (default `0`). */
+  dataMinHz?: number;
+  /** Maximum frequency of the data in Hz (default `125000`). */
+  dataMaxHz?: number;
+}
+
 export interface SpectrogramRenderConfig {
   /** Client-side palette used to colorize uint8 values. */
   colormap?: SpectrogramColorMap;
   /** Extra pixels rendered beyond the viewport during scroll/seek. */
   prefetchMargin?: number;
+  /** Boost signal intensity in a specific frequency range. */
+  frequencyEmphasis?: FrequencyEmphasis;
 }
 
 /** Payload passed to `viewer.loadSpectrogram()` in the v2 data-tile format. */

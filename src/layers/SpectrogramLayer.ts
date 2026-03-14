@@ -3,6 +3,7 @@ import type {
   SpectrogramData,
   SpectrogramRenderConfig,
   SpectrogramTileDescriptor,
+  FrequencyEmphasis,
   ThemeColors,
 } from '../types';
 
@@ -25,6 +26,7 @@ export class SpectrogramLayer {
   private prefetchMargin = 1200;
   private renderQueued = false;
   private tileIndex = new Map<string, SpectrogramTileDescriptor>();
+  private frequencyEmphasis: FrequencyEmphasis | null = null;
 
   constructor(
     private scrollContent: HTMLElement,
@@ -37,6 +39,7 @@ export class SpectrogramLayer {
     this.pxPerSec = pxPerSec;
     this.height = height;
     this.prefetchMargin = config?.prefetchMargin ?? this.prefetchMargin;
+    this.frequencyEmphasis = config?.frequencyEmphasis ?? null;
     const initialColormap = config?.colormap ?? 'magma';
     this.lut = buildColorLut(initialColormap);
     this.backgroundColor = getColormapBackground(initialColormap);
@@ -249,13 +252,30 @@ export class SpectrogramLayer {
       const frameEdges = buildEdges(tile.frames, targetWidth);
       const binEdges = buildEdges(tile.bins, targetHeight);
 
+      const emph = this.frequencyEmphasis;
+      let emphBinStart = 0;
+      let emphBinEnd = 0;
+      let emphBoost = 1;
+      if (emph) {
+        const dMin = emph.dataMinHz ?? 0;
+        const dMax = emph.dataMaxHz ?? 125000;
+        const hzRange = dMax - dMin;
+        emphBinStart = Math.max(0, Math.floor((1 - (emph.maxHz - dMin) / hzRange) * tile.bins));
+        emphBinEnd = Math.min(tile.bins, Math.ceil((1 - (emph.minHz - dMin) / hzRange) * tile.bins));
+        emphBoost = emph.boost ?? 1.5;
+      }
+
       for (let y = 0; y < targetHeight; y += 1) {
         const binStart = binEdges[y];
         const binEnd = binEdges[y + 1];
+        const boosted = emph && binStart < emphBinEnd && binEnd > emphBinStart;
         for (let x = 0; x < targetWidth; x += 1) {
           const frameStart = frameEdges[x];
           const frameEnd = frameEdges[x + 1];
-          const value = maxPoolValue(raw, tile.bins, frameStart, frameEnd, binStart, binEnd);
+          let value = maxPoolValue(raw, tile.bins, frameStart, frameEnd, binStart, binEnd);
+          if (boosted) {
+            value = Math.min(255, (value * emphBoost + 0.5) | 0);
+          }
           const pixelBase = y * targetWidth + x;
           pixels[pixelBase] = this.lut[value];
         }
