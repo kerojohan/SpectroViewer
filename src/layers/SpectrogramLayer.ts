@@ -255,29 +255,26 @@ export class SpectrogramLayer {
       const emph = this.frequencyEmphasis;
       let emphBinStart = 0;
       let emphBinEnd = 0;
-      let emphBoost = 1;
+      let emphLut: Uint32Array | null = null;
       if (emph) {
         const dMin = emph.dataMinHz ?? 0;
         const dMax = emph.dataMaxHz ?? 125000;
         const hzRange = dMax - dMin;
         emphBinStart = Math.max(0, Math.floor((1 - (emph.maxHz - dMin) / hzRange) * tile.bins));
         emphBinEnd = Math.min(tile.bins, Math.ceil((1 - (emph.minHz - dMin) / hzRange) * tile.bins));
-        emphBoost = emph.boost ?? 1.5;
+        emphLut = buildEmphasisLut(this.lut, emph.boost ?? 1.4, emph.gamma ?? 1);
       }
 
       for (let y = 0; y < targetHeight; y += 1) {
         const binStart = binEdges[y];
         const binEnd = binEdges[y + 1];
-        const boosted = emph && binStart < emphBinEnd && binEnd > emphBinStart;
+        const rowLut = (emphLut && binStart < emphBinEnd && binEnd > emphBinStart) ? emphLut : this.lut;
         for (let x = 0; x < targetWidth; x += 1) {
           const frameStart = frameEdges[x];
           const frameEnd = frameEdges[x + 1];
-          let value = maxPoolValue(raw, tile.bins, frameStart, frameEnd, binStart, binEnd);
-          if (boosted) {
-            value = Math.min(255, (value * emphBoost + 0.5) | 0);
-          }
+          const value = maxPoolValue(raw, tile.bins, frameStart, frameEnd, binStart, binEnd);
           const pixelBase = y * targetWidth + x;
-          pixels[pixelBase] = this.lut[value];
+          pixels[pixelBase] = rowLut[value];
         }
       }
 
@@ -482,14 +479,15 @@ function getColorStops(colormap: SpectrogramColorMap): Array<[number, number, nu
       ];
     case 'chiroptera':
       return [
-        [1, 0, 5],
-        [4, 1, 20],
-        [6, 6, 45],
-        [0, 100, 80],
-        [180, 220, 0],
-        [255, 160, 0],
-        [255, 40, 20],
-        [255, 40, 120],
+        [0, 0, 3],
+        [5, 5, 28],
+        [12, 22, 62],
+        [10, 55, 95],
+        [0, 120, 115],
+        [50, 190, 45],
+        [220, 210, 0],
+        [255, 120, 0],
+        [255, 30, 50],
         [255, 250, 255],
       ];
     case 'magma':
@@ -506,6 +504,20 @@ function getColorStops(colormap: SpectrogramColorMap): Array<[number, number, nu
         [252, 253, 191],
       ];
   }
+}
+
+function buildEmphasisLut(baseLut: Uint32Array, boost: number, gamma: number): Uint32Array {
+  const lut = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let mapped: number;
+    if (i === 0 || gamma === 1) {
+      mapped = Math.min(255, (i * boost + 0.5) | 0);
+    } else {
+      mapped = Math.min(255, Math.round(Math.pow(i / 255, gamma) * 255 * boost));
+    }
+    lut[i] = baseLut[mapped];
+  }
+  return lut;
 }
 
 function packRgba(r: number, g: number, b: number, a: number): number {

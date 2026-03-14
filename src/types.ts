@@ -39,8 +39,13 @@ export interface FrequencyEmphasis {
   minHz: number;
   /** Upper frequency bound in Hz. */
   maxHz: number;
-  /** Intensity multiplier applied to values in this range (default `1.5`). */
+  /** Intensity multiplier applied after gamma (default `1.5`). */
   boost?: number;
+  /**
+   * Gamma exponent applied before boost.  Values < 1 (e.g. `0.6`)
+   * compress the dark end, revealing subtle signals.  `1.0` = linear.
+   */
+  gamma?: number;
   /** Minimum frequency of the data in Hz (default `0`). */
   dataMinHz?: number;
   /** Maximum frequency of the data in Hz (default `125000`). */
