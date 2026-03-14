@@ -2,25 +2,88 @@
 // SpectroViewer – Public type definitions
 // ---------------------------------------------------------------------------
 
-/** Descriptor for a single pre-rendered spectrogram image segment. */
-export interface SpectrogramFileDescriptor {
-  /** URL or path to the image (WebP, PNG, JPEG …). */
-  url: string;
-  /** Width in pixels at the native resolution. */
-  width: number;
-  /** Height in pixels at the native resolution. */
-  height: number;
-  /** Time offset in seconds where this segment begins. */
+export interface SpectrogramTileDescriptor {
+  /** Tile URL, already rewritten by the API to a fetchable endpoint. */
+  file: string;
+  /** Time offset in seconds where this tile begins. */
   startTime: number;
-  /** Duration in seconds covered by this segment. */
+  /** End time in seconds for this tile. */
+  endTime: number;
+  /** Duration in seconds covered by this tile. */
   duration: number;
+  /** Number of time frames encoded in the tile. */
+  frames: number;
+  /** Number of frequency bins encoded in the tile. */
+  bins: number;
 }
 
-/** Payload passed to `viewer.loadSpectrogram()`. */
+export interface SpectrogramTileFormat {
+  encoding: 'raw' | 'zstd';
+  dtype: 'uint8';
+  layout: 'time-major';
+  endianness?: 'little' | 'big';
+}
+
+export type SpectrogramColorMap =
+  | 'magma'
+  | 'inferno'
+  | 'viridis'
+  | 'plasma'
+  | 'turbo'
+  | 'gray'
+  | 'gray-inverse'
+  | 'chiroptera';
+
+export interface FrequencyEmphasis {
+  /** Lower frequency bound in Hz. */
+  minHz: number;
+  /** Upper frequency bound in Hz. */
+  maxHz: number;
+  /** Intensity multiplier applied after gamma (default `1.5`). */
+  boost?: number;
+  /**
+   * Gamma exponent applied before boost.  Values < 1 (e.g. `0.6`)
+   * compress the dark end, revealing subtle signals.  `1.0` = linear.
+   */
+  gamma?: number;
+  /** Minimum frequency of the data in Hz (default `0`). */
+  dataMinHz?: number;
+  /** Maximum frequency of the data in Hz (default `125000`). */
+  dataMaxHz?: number;
+}
+
+export interface SpectrogramRenderConfig {
+  /** Client-side palette used to colorize uint8 values. */
+  colormap?: SpectrogramColorMap;
+  /** Extra pixels rendered beyond the viewport during scroll/seek. */
+  prefetchMargin?: number;
+  /** Boost signal intensity in a specific frequency range. */
+  frequencyEmphasis?: FrequencyEmphasis;
+}
+
+/** Payload passed to `viewer.loadSpectrogram()` in the v2 data-tile format. */
 export interface SpectrogramData {
-  files: SpectrogramFileDescriptor[];
-  /** Total duration in seconds (if omitted, calculated from files). */
-  totalDuration?: number;
+  format: 'spectrogram-v2';
+  version: number;
+  audioFile?: string;
+  sampleRate: number;
+  fftSize: number;
+  hopLength: number;
+  window?: string;
+  freqMin: number;
+  freqMax: number;
+  bins: number;
+  dbMin: number;
+  dbMax: number;
+  tileDuration: number;
+  framesPerTile?: number;
+  bytesPerTile?: number;
+  height?: number;
+  minPixelsPerSecond?: number;
+  totalDuration: number;
+  tileFormat: SpectrogramTileFormat;
+  tiles: SpectrogramTileDescriptor[];
+  colormap?: SpectrogramColorMap;
   /** Enable lazy-loading via IntersectionObserver (default `true`). */
   lazyLoad?: boolean;
   /** Pre-load margin in pixels for lazy loading (default `300`). */
@@ -85,6 +148,23 @@ export interface FrequencyAxisConfig {
   formatLabel?: (hz: number) => string;
 }
 
+export interface FrequencyBandHighlight {
+  /** Lower bound in Hz. */
+  minHz: number;
+  /** Upper bound in Hz. */
+  maxHz: number;
+  /** Fill color for the band (default `'rgba(255, 200, 40, 0.07)'`). */
+  fillColor?: string;
+  /** Border line color (default `'rgba(255, 200, 40, 0.6)'`). */
+  borderColor?: string;
+  /** Border line width (default `1.5`). */
+  borderWidth?: number;
+  /** Optional label shown inside the band. */
+  label?: string;
+  /** Label color (default matches borderColor). */
+  labelColor?: string;
+}
+
 export interface FrequencyGridConfig {
   /** Explicit Hz values to draw lines at, or `'auto'` to derive from freq axis. */
   lines?: 'auto' | number[];
@@ -100,6 +180,8 @@ export interface FrequencyGridConfig {
   showLabels?: boolean;
   /** Custom label formatter. */
   formatLabel?: (hz: number) => string;
+  /** Highlighted frequency band(s) rendered as a tinted overlay. */
+  highlightBands?: FrequencyBandHighlight[];
 }
 
 export interface CursorConfig {
@@ -179,6 +261,7 @@ export interface SpectroViewerOptions {
   hover?: HoverConfig | false;
   scroll?: ScrollConfig;
   regions?: RegionsConfig | false;
+  spectrogram?: SpectrogramRenderConfig;
 
   theme?: ThemeName | ThemeColors;
 }

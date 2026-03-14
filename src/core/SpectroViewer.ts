@@ -2,6 +2,7 @@ import type {
   SpectroViewerOptions,
   SpectroViewerEvents,
   SpectrogramData,
+  SpectrogramColorMap,
   RegionOptions,
   Region,
   ThemeColors,
@@ -154,6 +155,7 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
       this.pxPerSec,
       this.spectrogramHeight,
       this.theme,
+      typeof opts.spectrogram === 'object' ? opts.spectrogram : undefined,
     );
 
     // Frequency grid (horizontal lines over the spectrogram)
@@ -230,7 +232,7 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
   // =========================================================================
 
   loadSpectrogram(data: SpectrogramData): void {
-    const totalDuration = data.totalDuration ?? data.files.reduce((s, f) => s + f.duration, 0);
+    const totalDuration = data.totalDuration;
     this._duration = totalDuration;
 
     this.spectrogramLayer.load(data);
@@ -244,6 +246,18 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
     }
 
     this.emit('ready');
+  }
+
+  loadSpectrogramData(data: SpectrogramData): void {
+    this.loadSpectrogram(data);
+  }
+
+  setColormap(colormap: SpectrogramColorMap): void {
+    this.spectrogramLayer.setColormap(colormap);
+    const bg = this.spectrogramLayer.getBackgroundColor();
+    this.root.style.background = bg;
+    this.root.style.setProperty('--sv-bg', bg);
+    this.timeline?.setBackground(bg);
   }
 
   // =========================================================================

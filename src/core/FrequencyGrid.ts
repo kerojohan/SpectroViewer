@@ -1,4 +1,4 @@
-import type { FrequencyGridConfig, FrequencyAxisConfig, ThemeColors } from '../types';
+import type { FrequencyGridConfig, FrequencyAxisConfig, FrequencyBandHighlight, ThemeColors } from '../types';
 import { FrequencyAxis } from './FrequencyAxis';
 
 /**
@@ -17,11 +17,14 @@ export class FrequencyGrid {
   private showLabels: boolean;
   private formatLabel: (hz: number) => string;
   private lines: 'auto' | number[];
+  private highlightBands: FrequencyBandHighlight[];
 
   private minHz: number;
   private maxHz: number;
   private labelCount: number;
   private currentWidth = 0;
+  private scrollViewport: HTMLElement | null = null;
+  private scrollHandler: (() => void) | null = null;
 
   constructor(
     private parent: HTMLElement,
@@ -40,6 +43,7 @@ export class FrequencyGrid {
     this.showLabels = cfg.showLabels ?? true;
     this.formatLabel = cfg.formatLabel ?? freqCfg.formatLabel ?? FrequencyAxis.defaultFormat;
     this.lines = cfg.lines ?? 'auto';
+    this.highlightBands = cfg.highlightBands ?? [];
 
     this.minHz = freqCfg.min ?? 0;
     this.maxHz = freqCfg.max ?? 125000;
@@ -48,9 +52,9 @@ export class FrequencyGrid {
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'sv-freq-grid';
     Object.assign(this.canvas.style, {
-      position: 'absolute',
-      top: '0',
+      position: 'sticky',
       left: '0',
+      top: '0',
       width: '100%',
       height: `${spectrogramHeight}px`,
       pointerEvents: 'none',
@@ -83,17 +87,31 @@ export class FrequencyGrid {
   /** Full render – call after zoom changes or initial load. */
   render(contentWidth: number): void {
     this.currentWidth = contentWidth;
+    this.paintGrid();
+  }
+
+  /**
+   * Paint the grid using the viewport width instead of the full content
+   * width. The canvas uses `position: sticky` so it stays within the
+   * visible area while the content scrolls underneath.
+   */
+  private paintGrid(): void {
     const dpr = window.devicePixelRatio || 1;
     const h = this.spectrogramHeight;
+    const viewport = this.parent.parentElement;
+    const drawWidth = viewport ? viewport.clientWidth : Math.min(this.currentWidth, 4000);
 
-    this.canvas.width = contentWidth * dpr;
+    this.canvas.width = drawWidth * dpr;
     this.canvas.height = h * dpr;
-    this.canvas.style.width = `${contentWidth}px`;
+    this.canvas.style.width = `${drawWidth}px`;
     this.canvas.style.height = `${h}px`;
 
     const ctx = this.ctx;
+    if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, contentWidth, h);
+    ctx.clearRect(0, 0, drawWidth, h);
+
+    this.paintHighlightBands(ctx, drawWidth, h);
 
     const values = this.resolveLines();
 
@@ -116,7 +134,7 @@ export class FrequencyGrid {
 
       ctx.beginPath();
       ctx.moveTo(0, y);
-      ctx.lineTo(contentWidth, y);
+      ctx.lineTo(drawWidth, y);
       ctx.stroke();
 
       if (this.showLabels) {
@@ -140,6 +158,59 @@ export class FrequencyGrid {
     ctx.setLineDash([]);
   }
 
+  private paintHighlightBands(ctx: CanvasRenderingContext2D, drawWidth: number, h: number): void {
+    for (const band of this.highlightBands) {
+      const yTop = Math.round(this.hzToY(Math.min(band.maxHz, this.maxHz)));
+      const yBottom = Math.round(this.hzToY(Math.max(band.minHz, this.minHz)));
+      const bandHeight = yBottom - yTop;
+      if (bandHeight <= 0) continue;
+
+      const fillColor = band.fillColor ?? 'rgba(255, 200, 40, 0.07)';
+      const borderColor = band.borderColor ?? 'rgba(255, 200, 40, 0.6)';
+      const borderWidth = band.borderWidth ?? 1.5;
+
+      ctx.save();
+
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = fillColor;
+      ctx.fillRect(0, yTop, drawWidth, bandHeight);
+
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = borderWidth;
+      ctx.setLineDash([]);
+
+      if (band.minHz > this.minHz) {
+        ctx.beginPath();
+        ctx.moveTo(0, yBottom + 0.5);
+        ctx.lineTo(drawWidth, yBottom + 0.5);
+        ctx.stroke();
+      }
+      if (band.maxHz < this.maxHz) {
+        ctx.beginPath();
+        ctx.moveTo(0, yTop + 0.5);
+        ctx.lineTo(drawWidth, yTop + 0.5);
+        ctx.stroke();
+      }
+
+      if (band.label) {
+        const labelColor = band.labelColor ?? borderColor;
+        ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+        ctx.textBaseline = 'top';
+        const labelW = ctx.measureText(band.label).width;
+        const labelX = drawWidth - labelW - 12;
+        const labelY = yTop + 4;
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(labelX - 4, labelY - 1, labelW + 8, 16);
+
+        ctx.fillStyle = labelColor;
+        ctx.fillText(band.label, labelX, labelY);
+      }
+
+      ctx.restore();
+    }
+  }
+
   /** Update when zoom level changes (new content width). */
   updateZoom(contentWidth: number): void {
     this.render(contentWidth);
@@ -154,6 +225,7 @@ export class FrequencyGrid {
     if (config.dashPattern !== undefined) this.dashPattern = config.dashPattern;
     if (config.showLabels !== undefined) this.showLabels = config.showLabels;
     if (config.formatLabel !== undefined) this.formatLabel = config.formatLabel;
+    if (config.highlightBands !== undefined) this.highlightBands = config.highlightBands;
     if (this.currentWidth > 0) this.render(this.currentWidth);
   }
 

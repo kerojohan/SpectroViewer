@@ -13,6 +13,8 @@ export class Timeline {
   private height: number;
   private config: Required<Pick<TimelineConfig, 'primaryColor' | 'secondaryColor' | 'fontColor' | 'fontSize' | 'fontFamily'>>;
   private scrollHandler: (() => void) | null = null;
+  private lastDuration = 0;
+  private lastPxPerSec = 100;
 
   constructor(
     private parentWrapper: HTMLElement,
@@ -53,24 +55,45 @@ export class Timeline {
     this.wrapper.appendChild(this.canvas);
     this.parentWrapper.appendChild(this.wrapper);
 
-    // Sync horizontal scroll with main viewport
     this.scrollHandler = () => {
-      this.wrapper.scrollLeft = this.scrollViewport.scrollLeft;
+      this.paintVisible();
     };
     this.scrollViewport.addEventListener('scroll', this.scrollHandler);
   }
 
-  render(duration: number, pxPerSec: number): void {
-    const totalWidth = Math.ceil(duration * pxPerSec);
-    const dpr = window.devicePixelRatio || 1;
+  setBackground(bg: string): void {
+    this.wrapper.style.background = bg;
+  }
 
-    this.canvas.width = totalWidth * dpr;
+  render(duration: number, pxPerSec: number): void {
+    this.lastDuration = duration;
+    this.lastPxPerSec = pxPerSec;
+    this.paintVisible();
+  }
+
+  /**
+   * Render only the visible portion of the timeline into a
+   * viewport-sized canvas, avoiding browser canvas dimension limits.
+   */
+  private paintVisible(): void {
+    const duration = this.lastDuration;
+    const pxPerSec = this.lastPxPerSec;
+    if (!duration || !pxPerSec) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const viewportWidth = this.scrollViewport.clientWidth;
+    const scrollLeft = this.scrollViewport.scrollLeft;
+    const totalWidth = Math.ceil(duration * pxPerSec);
+    const drawWidth = Math.min(viewportWidth, totalWidth);
+
+    this.canvas.width = drawWidth * dpr;
     this.canvas.height = this.height * dpr;
-    this.canvas.style.width = `${totalWidth}px`;
+    this.canvas.style.width = `${drawWidth}px`;
 
     const ctx = this.ctx;
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, totalWidth, this.height);
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, drawWidth, this.height);
 
     const interval = this.pickInterval(pxPerSec);
     const subInterval = interval / 5;
@@ -78,8 +101,13 @@ export class Timeline {
     ctx.font = `${this.config.fontSize}px ${this.config.fontFamily}`;
     ctx.textBaseline = 'top';
 
-    for (let t = 0; t <= duration; t += subInterval) {
-      const x = Math.round(t * pxPerSec) + 0.5;
+    const startTime = Math.max(0, Math.floor((scrollLeft / pxPerSec) / subInterval - 1) * subInterval);
+    const endTime = Math.min(duration, (scrollLeft + viewportWidth) / pxPerSec + subInterval);
+
+    for (let t = startTime; t <= endTime; t += subInterval) {
+      const x = Math.round(t * pxPerSec - scrollLeft) + 0.5;
+      if (x < -50 || x > drawWidth + 50) continue;
+
       const isMajor = Math.abs(t % interval) < 0.0001 || Math.abs(t % interval - interval) < 0.0001;
 
       ctx.beginPath();
@@ -101,9 +129,6 @@ export class Timeline {
         ctx.stroke();
       }
     }
-
-    // Sync scroll position after render
-    this.wrapper.scrollLeft = this.scrollViewport.scrollLeft;
   }
 
   /** Choose a nice human-readable tick interval based on zoom level. */

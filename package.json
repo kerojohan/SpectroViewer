@@ -1,7 +1,7 @@
 {
   "name": "spectro-viewer",
-  "version": "0.1.0",
-  "description": "Lightweight, framework-agnostic spectrogram viewer with regions, timeline, and media synchronization. Designed for bioacoustics and audio analysis.",
+  "version": "0.2.0-ratpenats",
+  "description": "Local Ratpenats fork of SpectroViewer with canvas-rendered spectrogram data tiles.",
   "type": "module",
   "main": "dist/spectro-viewer.umd.cjs",
   "module": "dist/spectro-viewer.js",
@@ -11,8 +11,7 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/spectro-viewer.js",
       "require": "./dist/spectro-viewer.umd.cjs"
-    },
-    "./style.css": "./dist/style.css"
+    }
   },
   "files": [
     "dist"
