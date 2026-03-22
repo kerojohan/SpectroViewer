@@ -54,6 +54,11 @@ export class Cursor {
     this.setTime(this.currentTime);
   }
 
+  updateHeight(height: number): void {
+    this.spectrogramHeight = height;
+    this.el.style.height = `${height}px`;
+  }
+
   destroy(): void {
     this.el.remove();
   }

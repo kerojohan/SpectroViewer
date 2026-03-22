@@ -329,6 +329,23 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
 
   getZoom(): number { return this.pxPerSec; }
 
+  setHeight(height: number): void {
+    if (!Number.isFinite(height) || height <= 0) return;
+    const nextHeight = Math.round(height);
+    if (nextHeight === this.spectrogramHeight) return;
+
+    this.spectrogramHeight = nextHeight;
+    this.scrollContent.style.minHeight = `${nextHeight}px`;
+    this.spectrogramLayer.updateHeight(nextHeight);
+    this.freqAxis?.updateHeight(nextHeight);
+    this.freqGrid?.updateHeight(nextHeight);
+    this.cursor?.updateHeight(nextHeight);
+    this.hoverLine?.updateHeight(nextHeight);
+    this.regionsLayer?.updateHeight(nextHeight);
+  }
+
+  getHeight(): number { return this.spectrogramHeight; }
+
   // =========================================================================
   // Scroll
   // =========================================================================

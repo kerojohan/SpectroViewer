@@ -110,6 +110,11 @@ export class HoverLine {
     if (!enabled) this.onLeave();
   }
 
+  updateHeight(height: number): void {
+    this.spectrogramHeight = height;
+    this.line.style.height = `${height}px`;
+  }
+
   destroy(): void {
     this.destroyed = true;
     this.interactionArea.removeEventListener('pointermove', this.onMove);

@@ -156,6 +156,8 @@ viewer.addRegion({
 
 - `zoom(pixelsPerSecond)`
 - `getZoom()`
+- `setHeight(heightPx)` – Resize spectrogram height at runtime
+- `getHeight()`
 - `scrollToTime(time, { center?, smooth? })`
 - `setAutoScroll(enabled)`
 - `setAutoCenter(enabled)`

@@ -216,6 +216,12 @@ export class FrequencyGrid {
     this.render(contentWidth);
   }
 
+  updateHeight(height: number): void {
+    this.spectrogramHeight = height;
+    this.canvas.style.height = `${height}px`;
+    if (this.currentWidth > 0) this.render(this.currentWidth);
+  }
+
   /** Update grid configuration dynamically. */
   update(config: Partial<FrequencyGridConfig>): void {
     if (config.lines !== undefined) this.lines = config.lines;

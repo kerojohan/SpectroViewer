@@ -175,6 +175,19 @@ export class SpectrogramLayer {
     this.scheduleVisibleRender();
   }
 
+  /** Update layer height and re-render visible tiles at the new resolution. */
+  updateHeight(height: number): void {
+    this.height = height;
+    this.wrapper.style.height = `${height}px`;
+    this.container.style.height = `${height}px`;
+    for (const canvas of this.canvases) {
+      canvas.dataset['rendered'] = 'false';
+      delete canvas.dataset['renderWidth'];
+      delete canvas.dataset['renderHeight'];
+    }
+    this.scheduleVisibleRender();
+  }
+
   /**
    * After zoom, re-observe canvases whose rendered resolution no longer
    * matches the current zoom so they re-render when scrolled into view.

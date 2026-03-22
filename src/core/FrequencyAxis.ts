@@ -134,6 +134,11 @@ export class FrequencyAxis {
     return this.width;
   }
 
+  updateHeight(height: number): void {
+    this.spectrogramHeight = height;
+    this.el.style.height = `${height}px`;
+  }
+
   destroy(): void {
     this.el.remove();
   }

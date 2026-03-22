@@ -427,6 +427,16 @@ export class RegionsLayer extends EventEmitter<RegionEvents> {
     }
   }
 
+  updateHeight(height: number): void {
+    this.spectrogramHeight = height;
+    for (const r of this.regions.values()) {
+      this.applyRegionStyles(r);
+    }
+    if (this.dragSelectionPreview) {
+      this.dragSelectionPreview.style.height = `${height}px`;
+    }
+  }
+
   destroy(): void {
     document.removeEventListener('pointermove', this.onPointerMove);
     document.removeEventListener('pointerup', this.onPointerUp);

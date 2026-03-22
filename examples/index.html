@@ -111,6 +111,12 @@
     </div>
 
     <div class="control-group">
+      <span style="font-size:0.8rem;">Height:</span>
+      <input type="range" id="height" min="120" max="520" step="20" value="400">
+      <span id="height-label" style="font-size:0.8rem;min-width:50px;">400 px</span>
+    </div>
+
+    <div class="control-group">
       <label><input type="checkbox" id="auto-scroll" checked> Auto scroll</label>
       <label><input type="checkbox" id="auto-center" checked> Auto center</label>
     </div>
@@ -228,6 +234,8 @@
     const timeDisplay = document.getElementById('time-display');
     const zoomSlider = document.getElementById('zoom');
     const zoomLabel = document.getElementById('zoom-label');
+    const heightSlider = document.getElementById('height');
+    const heightLabel = document.getElementById('height-label');
     let isDark = true;
 
     // Time formatting
@@ -254,6 +262,12 @@
       const val = Number(e.target.value);
       viewer.zoom(val);
       zoomLabel.textContent = `${val} px/s`;
+    });
+
+    heightSlider.addEventListener('input', (e) => {
+      const val = Number(e.target.value);
+      viewer.setHeight(val);
+      heightLabel.textContent = `${val} px`;
     });
 
     document.getElementById('auto-scroll').addEventListener('change', (e) => {
