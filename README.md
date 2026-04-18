@@ -691,4 +691,5 @@ Expected file on disk:
 ```bash
 npm install
 npm run build   # TypeScript + Vite bundle
+npm test        # Unit tests (vitest)
 ```
