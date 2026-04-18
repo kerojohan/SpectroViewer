@@ -8,6 +8,7 @@ import type {
   ThemeColors,
   FrequencyAxisConfig,
   ScrollConfig,
+  SyncMediaOptions,
 } from '../types';
 
 import { EventEmitter } from './EventEmitter';
@@ -264,8 +265,10 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
   // Media synchronization
   // =========================================================================
 
-  syncMedia(media: HTMLMediaElement): void {
+  syncMedia(media: HTMLMediaElement, opts?: SyncMediaOptions): void {
     if (this.mediaSync) this.mediaSync.destroy();
+
+    const offsetSec = opts?.offsetSec ?? 0;
 
     this.mediaSync = new MediaSync(
       (time) => this.onTimeUpdate(time),
@@ -273,6 +276,8 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
       () => { this._playing = false; this.emit('pause'); },
       () => { this._playing = false; this.emit('finish'); },
       (dur) => {
+        // dur is already the absolute end time (media.duration + offsetSec).
+        // Only update _duration if no spectrogram has set it yet.
         if (!this._duration || Math.abs(this._duration - dur) > 0.01) {
           this._duration = dur;
           this.updateContentWidth();
@@ -281,6 +286,7 @@ export class SpectroViewer extends EventEmitter<SpectroViewerEvents> {
           if (this.timeline) this.timeline.render(dur, this.pxPerSec);
         }
       },
+      offsetSec,
     );
     this.mediaSync.attach(media);
   }

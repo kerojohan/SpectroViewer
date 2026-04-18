@@ -17,6 +17,7 @@ export type {
   CursorConfig,
   HoverConfig,
   ScrollConfig,
+  SyncMediaOptions,
   ThemeName,
   ThemeColors,
 } from './types';

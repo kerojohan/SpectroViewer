@@ -266,6 +266,27 @@ export interface SpectroViewerOptions {
   theme?: ThemeName | ThemeColors;
 }
 
+// -- Media sync -------------------------------------------------------------
+
+export interface SyncMediaOptions {
+  /**
+   * Offset in seconds that maps the start of the media clip onto the
+   * absolute spectrogram timeline.
+   *
+   * Use this when the audio element contains a clip that begins at some
+   * point T within a longer session whose spectrogram is already loaded.
+   * Setting `offsetSec: T` lets the viewer:
+   *  - position the cursor at the correct absolute time while the clip plays
+   *  - seek the clip correctly when the user clicks anywhere on the timeline
+   *  - support "audio-only fragment" playback without external hacks
+   *
+   * @example
+   * // Audio file covers seconds 12.3 – 14.8 of the session
+   * viewer.syncMedia(audioEl, { offsetSec: 12.3 });
+   */
+  offsetSec?: number;
+}
+
 // -- Events -----------------------------------------------------------------
 
 export interface SpectroViewerEvents {

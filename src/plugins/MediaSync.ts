@@ -4,6 +4,11 @@
  *
  * This is intentionally a thin adapter so that the viewer stays
  * framework-agnostic and media-source-agnostic.
+ *
+ * When `offsetSec` is provided the adapter transparently translates between
+ * *media time* (0-based, as reported by the HTMLMediaElement) and *absolute
+ * timeline time* (media time + offsetSec).  The viewer always works in
+ * absolute time; the media element always receives media-local time.
  */
 export class MediaSync {
   private media: HTMLMediaElement | null = null;
@@ -16,6 +21,9 @@ export class MediaSync {
     private onPause: () => void,
     private onFinish: () => void,
     private onDurationChange: (duration: number) => void,
+    /** Seconds to add to every media-element timestamp to obtain the
+     *  absolute position on the spectrogram timeline. */
+    private offsetSec: number = 0,
   ) {}
 
   attach(media: HTMLMediaElement): void {
@@ -29,7 +37,7 @@ export class MediaSync {
     media.addEventListener('seeked', this.handleSeeked);
 
     if (media.duration && Number.isFinite(media.duration)) {
-      this.onDurationChange(media.duration);
+      this.onDurationChange(media.duration + this.offsetSec);
     }
 
     if (!media.paused) {
@@ -60,17 +68,26 @@ export class MediaSync {
     if (this.media.paused) this.media.play(); else this.media.pause();
   }
 
-  setTime(time: number): void {
-    if (this.media) this.media.currentTime = time;
+  /** Seek to an *absolute* timeline position (offsetSec is subtracted internally). */
+  setTime(absoluteTime: number): void {
+    if (!this.media) return;
+    const mediaTime = absoluteTime - this.offsetSec;
+    const dur = this.media.duration;
+    this.media.currentTime = Math.max(
+      0,
+      Number.isFinite(dur) ? Math.min(dur, mediaTime) : mediaTime,
+    );
   }
 
+  /** Returns the current position as an *absolute* timeline time. */
   getTime(): number {
-    return this.media?.currentTime ?? 0;
+    return (this.media?.currentTime ?? 0) + this.offsetSec;
   }
 
+  /** Returns the absolute end time of the attached media clip. */
   getDuration(): number {
     const d = this.media?.duration;
-    return d && Number.isFinite(d) ? d : 0;
+    return d && Number.isFinite(d) ? d + this.offsetSec : 0;
   }
 
   setPlaybackRate(rate: number): void {
@@ -90,7 +107,7 @@ export class MediaSync {
 
   private handlePause = (): void => {
     this.stopLoop();
-    this.onTimeUpdate(this.media?.currentTime ?? 0);
+    this.onTimeUpdate((this.media?.currentTime ?? 0) + this.offsetSec);
     this.onPause();
   };
 
@@ -101,11 +118,11 @@ export class MediaSync {
 
   private handleDurationChange = (): void => {
     const d = this.media?.duration;
-    if (d && Number.isFinite(d)) this.onDurationChange(d);
+    if (d && Number.isFinite(d)) this.onDurationChange(d + this.offsetSec);
   };
 
   private handleSeeked = (): void => {
-    this.onTimeUpdate(this.media?.currentTime ?? 0);
+    this.onTimeUpdate((this.media?.currentTime ?? 0) + this.offsetSec);
   };
 
   /**
@@ -116,7 +133,7 @@ export class MediaSync {
     this.stopLoop();
     const tick = () => {
       if (this.destroyed || !this.media || this.media.paused) return;
-      this.onTimeUpdate(this.media.currentTime);
+      this.onTimeUpdate(this.media.currentTime + this.offsetSec);
       this.raf = requestAnimationFrame(tick);
     };
     this.raf = requestAnimationFrame(tick);
